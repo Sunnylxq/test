@@ -71,11 +71,14 @@ body{font-family:'UD デジタル 教科書体 NK','UDDigitalKyokasho-NK','Hirag
 .year-select{background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:5px 10px;color:var(--text);font-size:.82rem;font-weight:700;outline:none;cursor:pointer}
 .year-select:focus{border-color:var(--accent)}
 /* ===== BIZ SUB TABS ===== */
-.biz-tabs{display:flex;gap:0;overflow-x:auto;border-bottom:1px solid var(--border);margin-bottom:16px;padding-bottom:0;scrollbar-width:none}
-.biz-tabs::-webkit-scrollbar{display:none}
-.biz-tab{padding:8px 14px;font-size:.78rem;font-weight:600;color:var(--muted);cursor:pointer;border-bottom:2px solid transparent;white-space:nowrap;transition:all .15s;flex-shrink:0}
-.biz-tab:hover{color:var(--text)}
-.biz-tab.active{color:var(--accent);border-bottom-color:var(--accent)}
+.biz-layout{display:flex;gap:16px;align-items:flex-start}
+.biz-tabs{display:flex;flex-direction:column;gap:2px;width:172px;flex-shrink:0;background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:8px;position:sticky;top:72px;max-height:calc(100vh - 100px);overflow-y:auto}
+.biz-tabs::-webkit-scrollbar{width:3px}
+.biz-tabs::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px}
+.biz-tab{padding:8px 12px;font-size:.78rem;font-weight:600;color:var(--muted);cursor:pointer;border-radius:7px;border-left:2px solid transparent;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;transition:all .15s}
+.biz-tab:hover{color:var(--text);background:var(--bg3)}
+.biz-tab.active{color:var(--accent);background:rgba(99,102,241,.12);border-left-color:var(--accent)}
+.biz-content-area{flex:1;min-width:0}
 .biz-section{display:none}
 .biz-section.active{display:block}
 /* ===== BIZ DATA TABLE ===== */
@@ -357,7 +360,8 @@ body{font-family:'UD デジタル 教科書体 NK','UDDigitalKyokasho-NK','Hirag
 
       <!-- 達成率 -->
       <div class="card">
-        <div class="card-title" style="margin-bottom:16px">🎯 事業別 計画達成率（累計）</div>
+        <div class="card-title" style="margin-bottom:4px">🎯 事業別 売上計画達成率（累計実績 ÷ 累計計画）</div>
+        <div style="font-size:.72rem;color:var(--muted);margin-bottom:14px">各事業の累計売上実績が累計計画に対して何%達成しているか</div>
         <div id="bizProgress"></div>
       </div>
     </div>
@@ -386,8 +390,10 @@ body{font-family:'UD デジタル 教科書体 NK','UDDigitalKyokasho-NK','Hirag
           <div class="page-sub" id="bizSub">各事業の売上推移</div>
         </div>
       </div>
-      <div class="biz-tabs" id="bizTabs"></div>
-      <div id="bizContent"></div>
+      <div class="biz-layout">
+        <div class="biz-tabs" id="bizTabs"></div>
+        <div class="biz-content-area" id="bizContent"></div>
+      </div>
     </div>
 
     <!-- RANKING PAGE -->
