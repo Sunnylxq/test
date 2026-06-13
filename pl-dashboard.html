@@ -1,0 +1,1348 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>事業 PL 管理ダッシュボード</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+  /* ===== RESET & BASE ===== */
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --bg: #0f1117;
+    --bg2: #1a1d2e;
+    --bg3: #242840;
+    --card: #1e2235;
+    --border: #2e3250;
+    --accent: #6366f1;
+    --accent2: #8b5cf6;
+    --green: #10b981;
+    --red: #ef4444;
+    --yellow: #f59e0b;
+    --blue: #3b82f6;
+    --cyan: #06b6d4;
+    --text: #e2e8f0;
+    --text2: #94a3b8;
+    --text3: #64748b;
+    --radius: 12px;
+    --shadow: 0 4px 24px rgba(0,0,0,0.4);
+  }
+  html { font-size: 14px; }
+  body {
+    font-family: 'Inter', 'Hiragino Sans', 'Yu Gothic', system-ui, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    line-height: 1.5;
+  }
+
+  /* ===== SCROLLBAR ===== */
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-track { background: var(--bg2); }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+  /* ===== LAYOUT ===== */
+  .app { display: flex; height: 100vh; overflow: hidden; }
+
+  /* ===== SIDEBAR ===== */
+  .sidebar {
+    width: 220px; min-width: 220px;
+    background: var(--bg2);
+    border-right: 1px solid var(--border);
+    display: flex; flex-direction: column;
+    padding: 24px 0;
+    z-index: 10;
+  }
+  .logo {
+    padding: 0 20px 24px;
+    font-size: 1.1rem; font-weight: 700;
+    color: var(--text);
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 16px;
+  }
+  .logo span { color: var(--accent); }
+  .nav-item {
+    display: flex; align-items: center; gap: 10px;
+    padding: 10px 20px;
+    cursor: pointer;
+    border-radius: 0;
+    transition: all 0.15s;
+    color: var(--text2);
+    font-weight: 500;
+    border-left: 3px solid transparent;
+  }
+  .nav-item:hover { background: var(--bg3); color: var(--text); }
+  .nav-item.active {
+    background: rgba(99,102,241,0.12);
+    color: var(--accent);
+    border-left-color: var(--accent);
+  }
+  .nav-icon { font-size: 1.1rem; width: 20px; text-align: center; }
+  .nav-section {
+    padding: 16px 20px 6px;
+    font-size: 0.72rem; font-weight: 600;
+    color: var(--text3); text-transform: uppercase; letter-spacing: 0.08em;
+  }
+
+  /* ===== MAIN ===== */
+  .main { flex: 1; overflow-y: auto; }
+
+  /* ===== PAGE ===== */
+  .page { display: none; padding: 32px; animation: fadeIn 0.2s ease; }
+  .page.active { display: block; }
+  @keyframes fadeIn { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:none; } }
+
+  /* ===== PAGE HEADER ===== */
+  .page-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 28px; }
+  .page-title { font-size: 1.5rem; font-weight: 700; }
+  .page-subtitle { color: var(--text2); font-size: 0.85rem; margin-top: 2px; }
+  .header-actions { display: flex; gap: 10px; align-items: center; }
+
+  /* ===== BADGE ===== */
+  .badge {
+    display: inline-flex; align-items: center; gap: 5px;
+    padding: 4px 10px; border-radius: 20px;
+    font-size: 0.78rem; font-weight: 600;
+  }
+  .badge-green { background: rgba(16,185,129,0.15); color: var(--green); }
+  .badge-red   { background: rgba(239,68,68,0.15);  color: var(--red); }
+  .badge-yellow{ background: rgba(245,158,11,0.15); color: var(--yellow); }
+  .badge-blue  { background: rgba(59,130,246,0.15); color: var(--blue); }
+  .badge-purple{ background: rgba(99,102,241,0.15); color: var(--accent); }
+
+  /* ===== KPI CARDS ===== */
+  .kpi-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 16px; margin-bottom: 24px; }
+  .kpi-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 20px;
+    position: relative; overflow: hidden;
+    transition: transform 0.15s, box-shadow 0.15s;
+  }
+  .kpi-card:hover { transform: translateY(-2px); box-shadow: var(--shadow); }
+  .kpi-card::before {
+    content: '';
+    position: absolute; top: 0; left: 0; right: 0; height: 3px;
+  }
+  .kpi-card.green::before  { background: var(--green); }
+  .kpi-card.red::before    { background: var(--red); }
+  .kpi-card.blue::before   { background: var(--blue); }
+  .kpi-card.purple::before { background: var(--accent); }
+  .kpi-card.cyan::before   { background: var(--cyan); }
+  .kpi-card.yellow::before { background: var(--yellow); }
+  .kpi-label { font-size: 0.78rem; color: var(--text2); font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 8px; }
+  .kpi-icon { font-size: 1.4rem; margin-bottom: 6px; }
+  .kpi-value { font-size: 1.7rem; font-weight: 700; margin-bottom: 4px; }
+  .kpi-sub { font-size: 0.78rem; color: var(--text2); }
+  .kpi-change { display: inline-flex; align-items: center; gap: 3px; font-size: 0.8rem; font-weight: 600; margin-top: 6px; }
+  .kpi-change.up { color: var(--green); }
+  .kpi-change.down { color: var(--red); }
+  .kpi-bg-icon {
+    position: absolute; right: 14px; bottom: 10px;
+    font-size: 3rem; opacity: 0.06; pointer-events: none;
+  }
+
+  /* ===== SECTION ===== */
+  .section { margin-bottom: 28px; }
+  .section-header {
+    display: flex; align-items: center; justify-content: space-between;
+    margin-bottom: 14px;
+  }
+  .section-title { font-size: 1rem; font-weight: 700; display: flex; align-items: center; gap: 8px; }
+
+  /* ===== CHART CARD ===== */
+  .chart-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 20px;
+  }
+  .chart-title { font-size: 0.85rem; font-weight: 600; color: var(--text2); margin-bottom: 14px; }
+  .chart-wrap { position: relative; }
+  canvas { max-width: 100%; }
+
+  /* ===== GRID ===== */
+  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; }
+  .grid-4 { display: grid; grid-template-columns: repeat(4,1fr); gap: 16px; }
+
+  /* ===== ALERTS ===== */
+  .alert {
+    display: flex; align-items: flex-start; gap: 12px;
+    padding: 14px 16px;
+    border-radius: 10px; margin-bottom: 10px;
+    border-left: 4px solid;
+    background: var(--card);
+  }
+  .alert-red    { border-color: var(--red);    background: rgba(239,68,68,0.06); }
+  .alert-yellow { border-color: var(--yellow); background: rgba(245,158,11,0.06); }
+  .alert-green  { border-color: var(--green);  background: rgba(16,185,129,0.06); }
+  .alert-icon { font-size: 1.2rem; margin-top: 1px; }
+  .alert-body { flex: 1; }
+  .alert-title { font-weight: 700; font-size: 0.88rem; margin-bottom: 2px; }
+  .alert-desc  { font-size: 0.8rem; color: var(--text2); }
+  .alert-time  { font-size: 0.72rem; color: var(--text3); margin-top: 4px; }
+
+  /* ===== RANKING ===== */
+  .rank-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    overflow: hidden;
+  }
+  .rank-header {
+    padding: 14px 18px;
+    border-bottom: 1px solid var(--border);
+    font-size: 0.82rem; font-weight: 700;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .rank-row {
+    display: flex; align-items: center; gap: 12px;
+    padding: 12px 18px;
+    border-bottom: 1px solid var(--border);
+    transition: background 0.12s;
+  }
+  .rank-row:last-child { border-bottom: none; }
+  .rank-row:hover { background: var(--bg3); }
+  .rank-num {
+    width: 26px; height: 26px;
+    border-radius: 8px; display: flex; align-items: center; justify-content: center;
+    font-size: 0.78rem; font-weight: 800;
+  }
+  .rank-num.r1 { background: rgba(245,158,11,0.2); color: #f59e0b; }
+  .rank-num.r2 { background: rgba(148,163,184,0.2); color: #94a3b8; }
+  .rank-num.r3 { background: rgba(180,120,60,0.2);  color: #cd7f32; }
+  .rank-num.rn { background: var(--bg3); color: var(--text3); }
+  .rank-name { flex: 1; font-weight: 600; font-size: 0.88rem; }
+  .rank-value { font-weight: 700; font-size: 0.92rem; }
+  .rank-bar-wrap { width: 80px; background: var(--bg3); border-radius: 4px; height: 6px; overflow: hidden; }
+  .rank-bar { height: 6px; border-radius: 4px; background: var(--accent); }
+
+  /* ===== INPUT TABLE ===== */
+  .input-section {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    overflow: hidden; margin-bottom: 24px;
+  }
+  .input-header {
+    padding: 16px 20px;
+    border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: space-between;
+  }
+  .input-title { font-weight: 700; font-size: 0.95rem; display: flex; align-items: center; gap: 8px; }
+  .table-wrap { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; font-size: 0.82rem; }
+  th {
+    background: var(--bg3);
+    padding: 10px 12px;
+    text-align: center; font-weight: 600; color: var(--text2);
+    border-bottom: 1px solid var(--border);
+    white-space: nowrap;
+  }
+  th.left { text-align: left; }
+  td {
+    padding: 8px 12px;
+    text-align: right;
+    border-bottom: 1px solid var(--border);
+  }
+  td.label { text-align: left; font-weight: 600; color: var(--text2); background: var(--bg3); }
+  td.highlight { background: rgba(99,102,241,0.06); }
+  td.green-text { color: var(--green); font-weight: 700; }
+  td.red-text   { color: var(--red);   font-weight: 700; }
+  td.section-row { background: var(--bg2); font-weight: 700; color: var(--text); }
+  input[type="number"] {
+    width: 100%; min-width: 80px;
+    background: var(--bg3);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    color: var(--text);
+    padding: 5px 8px;
+    text-align: right;
+    font-size: 0.82rem;
+    transition: border-color 0.15s;
+    -moz-appearance: textfield;
+  }
+  input[type="number"]::-webkit-inner-spin-button,
+  input[type="number"]::-webkit-outer-spin-button { -webkit-appearance: none; }
+  input[type="number"]:focus {
+    outline: none;
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px rgba(99,102,241,0.2);
+  }
+  tr:last-child td { border-bottom: none; }
+
+  /* ===== BUTTONS ===== */
+  .btn {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 8px 16px; border-radius: 8px;
+    font-size: 0.82rem; font-weight: 600; cursor: pointer;
+    border: none; transition: all 0.15s;
+  }
+  .btn-primary { background: var(--accent); color: #fff; }
+  .btn-primary:hover { background: var(--accent2); }
+  .btn-outline {
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--text2);
+  }
+  .btn-outline:hover { background: var(--bg3); color: var(--text); }
+  .btn-sm { padding: 5px 10px; font-size: 0.76rem; }
+
+  /* ===== TABS ===== */
+  .tabs { display: flex; gap: 4px; background: var(--bg3); padding: 4px; border-radius: 10px; margin-bottom: 20px; }
+  .tab {
+    padding: 7px 16px; border-radius: 7px;
+    cursor: pointer; font-size: 0.82rem; font-weight: 600;
+    color: var(--text2); transition: all 0.15s;
+  }
+  .tab.active { background: var(--card); color: var(--text); box-shadow: 0 1px 4px rgba(0,0,0,0.3); }
+  .tab-content { display: none; }
+  .tab-content.active { display: block; }
+
+  /* ===== FORECAST CARD ===== */
+  .forecast-grid { display: grid; grid-template-columns: repeat(3,1fr); gap: 16px; margin-bottom: 20px; }
+  .forecast-card {
+    background: var(--card); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 20px;
+    text-align: center;
+  }
+  .forecast-label { font-size: 0.78rem; color: var(--text2); margin-bottom: 6px; font-weight: 600; }
+  .forecast-value { font-size: 1.5rem; font-weight: 800; color: var(--accent); }
+  .forecast-vs { font-size: 0.78rem; color: var(--text2); margin-top: 4px; }
+
+  /* ===== PROGRESS BAR ===== */
+  .progress-wrap { background: var(--bg3); border-radius: 8px; height: 10px; overflow: hidden; margin-top: 8px; }
+  .progress-bar  { height: 10px; border-radius: 8px; transition: width 0.5s ease; }
+
+  /* ===== TOOLTIP ===== */
+  .tooltip-wrap { position: relative; display: inline-block; }
+  .tooltip-wrap:hover .tooltip-box { opacity: 1; pointer-events: auto; }
+  .tooltip-box {
+    position: absolute; bottom: calc(100% + 8px); left: 50%; transform: translateX(-50%);
+    background: #0a0c12; border: 1px solid var(--border);
+    padding: 6px 10px; border-radius: 7px;
+    font-size: 0.75rem; white-space: nowrap;
+    opacity: 0; pointer-events: none; transition: opacity 0.15s;
+    z-index: 100;
+  }
+
+  /* ===== SEPARATOR ===== */
+  .sep { height: 1px; background: var(--border); margin: 20px 0; }
+
+  /* ===== MISC ===== */
+  .text-muted { color: var(--text2); }
+  .text-small { font-size: 0.78rem; }
+  .mt-8  { margin-top: 8px; }
+  .mt-16 { margin-top: 16px; }
+  .flex  { display: flex; align-items: center; }
+  .gap-8 { gap: 8px; }
+  .gap-16{ gap: 16px; }
+  .ml-auto { margin-left: auto; }
+
+  /* ===== BUSINESS TABS IN ANALYSIS ===== */
+  .biz-tab-row { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 20px; }
+  .biz-tab {
+    padding: 6px 14px; border-radius: 20px;
+    font-size: 0.8rem; font-weight: 600;
+    cursor: pointer;
+    background: var(--bg3); color: var(--text2);
+    border: 1px solid var(--border);
+    transition: all 0.15s;
+  }
+  .biz-tab.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+
+  .empty-state {
+    text-align: center; padding: 60px 20px; color: var(--text3);
+  }
+  .empty-state .icon { font-size: 3rem; margin-bottom: 12px; }
+
+  /* 年度サマリーテーブル */
+  .summary-table { width: 100%; border-collapse: collapse; font-size: 0.82rem; }
+  .summary-table th, .summary-table td { padding: 10px 14px; border-bottom: 1px solid var(--border); }
+  .summary-table th { background: var(--bg3); font-weight: 600; color: var(--text2); }
+  .summary-table tr:hover td { background: rgba(99,102,241,0.04); }
+  .summary-table td:first-child { font-weight: 600; }
+</style>
+</head>
+<body>
+<div class="app">
+  <!-- SIDEBAR -->
+  <nav class="sidebar">
+    <div class="logo">📊 <span>PL</span> Manager</div>
+    <div class="nav-section">メイン</div>
+    <div class="nav-item active" onclick="showPage('dashboard')">
+      <span class="nav-icon">🏠</span> ダッシュボード
+    </div>
+    <div class="nav-item" onclick="showPage('alerts')">
+      <span class="nav-icon">🔔</span> アラート <span id="alertBadge" style="margin-left:auto;background:var(--red);color:#fff;border-radius:10px;padding:1px 7px;font-size:0.7rem;font-weight:700;">0</span>
+    </div>
+    <div class="nav-section">分析</div>
+    <div class="nav-item" onclick="showPage('analysis')">
+      <span class="nav-icon">📈</span> 事業別分析
+    </div>
+    <div class="nav-item" onclick="showPage('ranking')">
+      <span class="nav-icon">🏆</span> ランキング
+    </div>
+    <div class="nav-item" onclick="showPage('forecast')">
+      <span class="nav-icon">🔮</span> 年度予測
+    </div>
+    <div class="nav-section">データ入力</div>
+    <div class="nav-item" onclick="showPage('input')">
+      <span class="nav-icon">✏️</span> データ入力
+    </div>
+    <div class="nav-item" onclick="showPage('settings')">
+      <span class="nav-icon">⚙️</span> 設定
+    </div>
+  </nav>
+
+  <!-- MAIN -->
+  <main class="main">
+
+    <!-- ============ DASHBOARD ============ -->
+    <div class="page active" id="page-dashboard">
+      <div class="page-header">
+        <div>
+          <div class="page-title">ダッシュボード</div>
+          <div class="page-subtitle" id="dashSubtitle">全事業の経営状況サマリー</div>
+        </div>
+        <div class="header-actions">
+          <select id="dashYear" class="btn btn-outline" onchange="renderAll()" style="cursor:pointer;">
+            <option value="2024">2024年度</option>
+            <option value="2025" selected>2025年度</option>
+          </select>
+          <button class="btn btn-primary" onclick="showPage('input')">✏️ データ入力</button>
+        </div>
+      </div>
+
+      <!-- KPI -->
+      <div class="kpi-grid" id="kpiGrid"></div>
+
+      <!-- 進捗バー -->
+      <div class="section">
+        <div class="section-header">
+          <div class="section-title">📅 月次進捗（年度累計 vs 計画）</div>
+        </div>
+        <div class="chart-card" id="progressSection"></div>
+      </div>
+
+      <!-- チャート群 -->
+      <div class="grid-2 section">
+        <div class="chart-card">
+          <div class="chart-title">📊 全社売上推移（月次）</div>
+          <div class="chart-wrap"><canvas id="chartTotalSales" height="200"></canvas></div>
+        </div>
+        <div class="chart-card">
+          <div class="chart-title">💰 全社営業利益推移（月次）</div>
+          <div class="chart-wrap"><canvas id="chartTotalProfit" height="200"></canvas></div>
+        </div>
+      </div>
+      <div class="grid-2 section">
+        <div class="chart-card">
+          <div class="chart-title">🥧 事業別売上構成（累計）</div>
+          <div class="chart-wrap" style="max-height:220px;display:flex;justify-content:center;"><canvas id="chartPie" height="200"></canvas></div>
+        </div>
+        <div class="chart-card">
+          <div class="chart-title">📉 利益率推移（全社）</div>
+          <div class="chart-wrap"><canvas id="chartMargin" height="200"></canvas></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ============ ALERTS ============ -->
+    <div class="page" id="page-alerts">
+      <div class="page-header">
+        <div>
+          <div class="page-title">🔔 アラート＆経営提示</div>
+          <div class="page-subtitle">自動検知された異常・注意事項</div>
+        </div>
+      </div>
+      <div id="alertList"></div>
+    </div>
+
+    <!-- ============ ANALYSIS ============ -->
+    <div class="page" id="page-analysis">
+      <div class="page-header">
+        <div>
+          <div class="page-title">📈 事業別分析</div>
+          <div class="page-subtitle">各事業のKPI・チャートを詳細確認</div>
+        </div>
+        <select id="analysisYear" class="btn btn-outline" onchange="renderAnalysis()" style="cursor:pointer;">
+          <option value="2024">2024年度</option>
+          <option value="2025" selected>2025年度</option>
+        </select>
+      </div>
+      <div class="biz-tab-row" id="bizTabs"></div>
+      <div id="analysisContent"></div>
+    </div>
+
+    <!-- ============ RANKING ============ -->
+    <div class="page" id="page-ranking">
+      <div class="page-header">
+        <div>
+          <div class="page-title">🏆 事業ランキング</div>
+          <div class="page-subtitle">累計実績による事業パフォーマンス比較</div>
+        </div>
+        <select id="rankingYear" class="btn btn-outline" onchange="renderRanking()" style="cursor:pointer;">
+          <option value="2024">2024年度</option>
+          <option value="2025" selected>2025年度</option>
+        </select>
+      </div>
+      <div class="grid-2 section">
+        <div id="rankSales"></div>
+        <div id="rankProfit"></div>
+      </div>
+      <div class="grid-2 section">
+        <div id="rankMargin"></div>
+        <div id="rankGrowth"></div>
+      </div>
+    </div>
+
+    <!-- ============ FORECAST ============ -->
+    <div class="page" id="page-forecast">
+      <div class="page-header">
+        <div>
+          <div class="page-title">🔮 年度予測</div>
+          <div class="page-subtitle">現在の実績ペースから年末着地を予測</div>
+        </div>
+        <select id="forecastYear" class="btn btn-outline" onchange="renderForecast()" style="cursor:pointer;">
+          <option value="2024">2024年度</option>
+          <option value="2025" selected>2025年度</option>
+        </select>
+      </div>
+      <div id="forecastContent"></div>
+    </div>
+
+    <!-- ============ INPUT ============ -->
+    <div class="page" id="page-input">
+      <div class="page-header">
+        <div>
+          <div class="page-title">✏️ データ入力</div>
+          <div class="page-subtitle">実績・計画・前年データを入力してください</div>
+        </div>
+        <div class="header-actions">
+          <select id="inputYear" class="btn btn-outline" onchange="renderInputPage()" style="cursor:pointer;">
+            <option value="2024">2024年度</option>
+            <option value="2025" selected>2025年度</option>
+          </select>
+          <button class="btn btn-primary" onclick="renderAll()">💾 保存して反映</button>
+        </div>
+      </div>
+      <div id="inputContent"></div>
+    </div>
+
+    <!-- ============ SETTINGS ============ -->
+    <div class="page" id="page-settings">
+      <div class="page-header">
+        <div>
+          <div class="page-title">⚙️ 設定</div>
+          <div class="page-subtitle">事業単位・閾値・表示設定</div>
+        </div>
+      </div>
+      <div class="input-section">
+        <div class="input-header">
+          <div class="input-title">🏢 事業管理</div>
+          <button class="btn btn-primary btn-sm" onclick="addBusiness()">＋ 事業を追加</button>
+        </div>
+        <div style="padding:16px 20px;" id="bizList"></div>
+      </div>
+      <div class="input-section">
+        <div class="input-header">
+          <div class="input-title">⚠️ アラート閾値</div>
+        </div>
+        <div style="padding:20px;">
+          <div class="grid-3">
+            <div>
+              <label style="font-size:0.8rem;color:var(--text2);display:block;margin-bottom:6px;">🔴 売上計画乖離率（%）</label>
+              <input type="number" id="th_sales" value="10" style="width:100%;">
+            </div>
+            <div>
+              <label style="font-size:0.8rem;color:var(--text2);display:block;margin-bottom:6px;">🟡 利益率低下連続月数</label>
+              <input type="number" id="th_margin" value="3" style="width:100%;">
+            </div>
+            <div>
+              <label style="font-size:0.8rem;color:var(--text2);display:block;margin-bottom:6px;">🟢 達成率超過（%）</label>
+              <input type="number" id="th_achieve" value="110" style="width:100%;">
+            </div>
+          </div>
+          <button class="btn btn-primary mt-16" onclick="renderAll()">設定を保存して反映</button>
+        </div>
+      </div>
+    </div>
+
+  </main>
+</div>
+
+<script>
+// ==================== DATA MODEL ====================
+const MONTHS = ['4月','5月','6月','7月','8月','9月','10月','11月','12月','1月','2月','3月'];
+const YEARS  = ['2024','2025'];
+
+// 現在月（デモ: 2025年9月 = インデックス5）
+const CURRENT_MONTH_IDX = 5;
+
+// 事業マスター
+let businesses = [
+  { id: 'biz1', name: '事業A（コンサルティング）', color: '#6366f1' },
+  { id: 'biz2', name: '事業B（SaaS）',              color: '#10b981' },
+  { id: 'biz3', name: '事業C（製造）',              color: '#f59e0b' },
+  { id: 'biz4', name: '事業D（EC）',                color: '#06b6d4' },
+];
+
+// PL入力データ構造: data[year][bizId][type][month]
+// type: actual_sales, plan_sales, prev_sales, actual_cogs, plan_cogs, prev_cogs, actual_sg, plan_sg, prev_sg
+function makeMonths(val) { return Array(12).fill(val); }
+
+let plData = {
+  '2024': {
+    biz1: {
+      actual_sales: [42,45,48,50,47,52,55,53,58,60,62,65],
+      plan_sales:   [40,44,46,50,48,50,54,55,57,60,63,66],
+      prev_sales:   [35,37,39,42,40,44,46,47,50,52,54,57],
+      actual_cogs:  [14,15,16,17,16,17,18,18,19,20,21,22],
+      plan_cogs:    [13,14,15,17,16,17,18,18,19,20,21,22],
+      prev_cogs:    [12,12,13,14,13,15,15,16,17,17,18,19],
+      actual_sg:    [12,12,13,14,14,15,16,15,17,17,18,19],
+      plan_sg:      [12,13,13,14,14,14,15,16,16,17,18,19],
+      prev_sg:      [10,10,11,12,11,12,13,13,14,14,15,16],
+    },
+    biz2: {
+      actual_sales: [28,30,32,35,34,38,40,42,44,46,48,52],
+      plan_sales:   [27,30,31,34,35,37,40,41,44,46,49,53],
+      prev_sales:   [20,21,23,25,24,26,28,29,31,33,35,38],
+      actual_cogs:  [8,9,9,10,10,11,12,12,13,13,14,15],
+      plan_cogs:    [8,9,9,10,10,11,12,12,13,14,14,15],
+      prev_cogs:    [6,6,7,7,7,8,8,8,9,9,10,11],
+      actual_sg:    [10,10,11,12,11,13,14,14,15,16,16,17],
+      plan_sg:      [10,10,11,12,12,13,14,14,15,16,17,18],
+      prev_sg:      [7,7,8,9,8,9,10,10,11,11,12,13],
+    },
+    biz3: {
+      actual_sales: [80,82,85,88,85,90,92,90,95,98,100,105],
+      plan_sales:   [78,82,84,88,86,90,92,92,95,98,101,106],
+      prev_sales:   [72,74,76,79,77,80,83,82,85,88,90,95],
+      actual_cogs:  [52,53,55,57,55,58,60,58,62,64,65,68],
+      plan_cogs:    [51,53,55,57,56,59,60,60,62,64,66,69],
+      prev_cogs:    [47,48,50,52,50,53,55,54,56,58,59,63],
+      actual_sg:    [14,14,15,16,15,16,17,16,17,18,18,19],
+      plan_sg:      [14,15,15,16,16,16,17,17,17,18,18,19],
+      prev_sg:      [12,13,13,14,13,14,15,14,15,15,16,17],
+    },
+    biz4: {
+      actual_sales: [55,58,60,65,62,68,72,70,75,78,80,85],
+      plan_sales:   [53,57,60,64,63,67,71,72,75,78,81,86],
+      prev_sales:   [45,47,49,52,50,54,57,56,60,62,64,68],
+      actual_cogs:  [33,35,36,39,37,41,43,42,45,47,48,51],
+      plan_cogs:    [32,34,36,38,38,40,43,43,45,47,49,52],
+      prev_cogs:    [27,28,29,31,30,32,34,33,36,37,38,41],
+      actual_sg:    [11,11,12,13,12,14,14,14,15,15,16,17],
+      plan_sg:      [11,11,12,12,13,13,14,14,15,16,16,17],
+      prev_sg:      [9,9,10,10,10,11,11,11,12,12,13,13],
+    },
+  },
+  '2025': {
+    biz1: {
+      actual_sales: [66,68,72,74,70,75,0,0,0,0,0,0],
+      plan_sales:   [65,68,71,75,72,76,78,80,82,85,86,88],
+      prev_sales:   [42,45,48,50,47,52,55,53,58,60,62,65],
+      actual_cogs:  [22,23,24,25,24,25,0,0,0,0,0,0],
+      plan_cogs:    [22,23,24,25,24,26,26,27,27,28,29,30],
+      prev_cogs:    [14,15,16,17,16,17,18,18,19,20,21,22],
+      actual_sg:    [19,19,20,21,20,22,0,0,0,0,0,0],
+      plan_sg:      [19,20,20,21,21,22,22,23,23,24,25,26],
+      prev_sg:      [12,12,13,14,14,15,16,15,17,17,18,19],
+    },
+    biz2: {
+      actual_sales: [53,55,58,61,58,64,0,0,0,0,0,0],
+      plan_sales:   [54,56,59,62,60,65,67,69,71,73,75,78],
+      prev_sales:   [28,30,32,35,34,38,40,42,44,46,48,52],
+      actual_cogs:  [15,16,17,18,17,19,0,0,0,0,0,0],
+      plan_cogs:    [16,16,17,18,18,19,20,20,21,21,22,23],
+      prev_cogs:    [8,9,9,10,10,11,12,12,13,13,14,15],
+      actual_sg:    [17,18,19,20,19,21,0,0,0,0,0,0],
+      plan_sg:      [18,18,19,20,20,21,22,22,23,24,24,25],
+      prev_sg:      [10,10,11,12,11,13,14,14,15,16,16,17],
+    },
+    biz3: {
+      actual_sales: [106,108,112,114,110,116,0,0,0,0,0,0],
+      plan_sales:   [107,110,112,116,113,118,120,119,123,125,128,132],
+      prev_sales:   [80,82,85,88,85,90,92,90,95,98,100,105],
+      actual_cogs:  [69,70,73,74,72,75,0,0,0,0,0,0],
+      plan_cogs:    [70,72,73,75,74,77,78,77,80,81,83,86],
+      prev_cogs:    [52,53,55,57,55,58,60,58,62,64,65,68],
+      actual_sg:    [19,20,20,21,20,22,0,0,0,0,0,0],
+      plan_sg:      [19,20,20,21,20,21,22,21,22,23,23,24],
+      prev_sg:      [14,14,15,16,15,16,17,16,17,18,18,19],
+    },
+    biz4: {
+      actual_sales: [86,88,92,95,91,97,0,0,0,0,0,0],
+      plan_sales:   [87,90,93,96,94,98,101,100,104,106,109,113],
+      prev_sales:   [55,58,60,65,62,68,72,70,75,78,80,85],
+      actual_cogs:  [52,53,55,57,55,58,0,0,0,0,0,0],
+      plan_cogs:    [52,54,56,58,56,59,61,60,62,64,65,68],
+      prev_cogs:    [33,35,36,39,37,41,43,42,45,47,48,51],
+      actual_sg:    [17,17,18,19,18,20,0,0,0,0,0,0],
+      plan_sg:      [17,18,18,19,19,20,20,20,21,21,22,23],
+      prev_sg:      [11,11,12,13,12,14,14,14,15,15,16,17],
+    },
+  }
+};
+
+// ==================== CALC ====================
+function calcBiz(year, bizId) {
+  const d = plData[year][bizId];
+  if (!d) return null;
+  const r = { months: [] };
+  for (let m = 0; m < 12; m++) {
+    const as = d.actual_sales[m]||0, ps = d.plan_sales[m]||0, pvs = d.prev_sales[m]||0;
+    const ac = d.actual_cogs[m]||0, pc = d.plan_cogs[m]||0;
+    const ag = d.actual_sg[m]||0,   pg = d.plan_sg[m]||0;
+    const pvc = (plData[String(Number(year)-1)]?.[bizId]?.actual_cogs?.[m])||d.prev_cogs?.[m]||0;
+    const pvg = (plData[String(Number(year)-1)]?.[bizId]?.actual_sg?.[m])||d.prev_sg?.[m]||0;
+    const aop = as - ac - ag;
+    const pop = ps - pc - pg;
+    const pvop= pvs - pvc - pvg;
+    r.months.push({
+      actual_sales: as, plan_sales: ps, prev_sales: pvs,
+      actual_cogs: ac, plan_cogs: pc,
+      actual_sg: ag, plan_sg: pg,
+      actual_op: aop, plan_op: pop, prev_op: pvop,
+      actual_margin: as ? aop/as*100 : 0,
+      plan_margin:   ps ? pop/ps*100 : 0,
+      achieve_rate:  ps ? as/ps*100 : 0,
+      yoy_sales:     pvs ? (as-pvs)/pvs*100 : 0,
+    });
+  }
+  // 累計（実績のある月のみ）
+  const filled = r.months.filter((_,i)=>i<=CURRENT_MONTH_IDX);
+  r.cum_sales   = sum(filled.map(m=>m.actual_sales));
+  r.cum_plan    = sum(filled.map(m=>m.plan_sales));
+  r.cum_prev    = sum(filled.map(m=>m.prev_sales));
+  r.cum_op      = sum(filled.map(m=>m.actual_op));
+  r.cum_pop     = sum(filled.map(m=>m.plan_op));
+  r.cum_pop_prev= sum(filled.map(m=>m.prev_op));
+  r.cum_margin  = r.cum_sales ? r.cum_op/r.cum_sales*100 : 0;
+  r.cum_achieve = r.cum_plan  ? r.cum_sales/r.cum_plan*100 : 0;
+  r.cum_yoy     = r.cum_prev  ? (r.cum_sales-r.cum_prev)/r.cum_prev*100 : 0;
+  // 年度計画合計
+  r.full_plan   = sum(d.plan_sales);
+  r.full_cogs_plan = sum(d.plan_cogs);
+  r.full_sg_plan   = sum(d.plan_sg);
+  r.full_plan_op   = r.full_plan - r.full_cogs_plan - r.full_sg_plan;
+  return r;
+}
+
+function sum(arr) { return arr.reduce((a,b)=>a+(b||0), 0); }
+
+function calcTotal(year) {
+  const ids = businesses.map(b=>b.id);
+  const res = ids.map(id=>calcBiz(year,id)).filter(Boolean);
+  const t = {
+    cum_sales: sum(res.map(r=>r.cum_sales)),
+    cum_plan:  sum(res.map(r=>r.cum_plan)),
+    cum_prev:  sum(res.map(r=>r.cum_prev)),
+    cum_op:    sum(res.map(r=>r.cum_op)),
+    cum_pop:   sum(res.map(r=>r.cum_pop)),
+    cum_pop_prev: sum(res.map(r=>r.cum_pop_prev)),
+    full_plan: sum(res.map(r=>r.full_plan)),
+    full_plan_op: sum(res.map(r=>r.full_plan_op)),
+  };
+  t.cum_margin  = t.cum_sales ? t.cum_op/t.cum_sales*100 : 0;
+  t.cum_achieve = t.cum_plan  ? t.cum_sales/t.cum_plan*100 : 0;
+  t.cum_yoy     = t.cum_prev  ? (t.cum_sales-t.cum_prev)/t.cum_prev*100 : 0;
+  // 月次合計
+  t.monthly = MONTHS.map((_,m)=>{
+    const ms = ids.map(id=>{
+      const d = plData[year][id];
+      if(!d) return {as:0,ps:0,pvs:0,aop:0,pop:0};
+      const as=d.actual_sales[m]||0, ps=d.plan_sales[m]||0, pvs=d.prev_sales[m]||0;
+      const ac=d.actual_cogs[m]||0, ag=d.actual_sg[m]||0;
+      const pc=d.plan_cogs[m]||0,   pg=d.plan_sg[m]||0;
+      return {as,ps,pvs,aop:as-ac-ag,pop:ps-pc-pg};
+    });
+    return {
+      actual_sales: sum(ms.map(m=>m.as)),
+      plan_sales:   sum(ms.map(m=>m.ps)),
+      prev_sales:   sum(ms.map(m=>m.pvs)),
+      actual_op:    sum(ms.map(m=>m.aop)),
+      plan_op:      sum(ms.map(m=>m.pop)),
+    };
+  });
+  return t;
+}
+
+// ==================== CHARTS ====================
+const chartInstances = {};
+function createChart(id, config) {
+  if (chartInstances[id]) chartInstances[id].destroy();
+  const ctx = document.getElementById(id);
+  if (!ctx) return;
+  chartInstances[id] = new Chart(ctx, config);
+  return chartInstances[id];
+}
+
+const CHART_DEFAULTS = {
+  responsive: true,
+  plugins: { legend: { labels: { color:'#94a3b8', font:{size:11} } } },
+  scales: {
+    x: { ticks:{color:'#64748b',font:{size:10}}, grid:{color:'rgba(255,255,255,0.04)'} },
+    y: { ticks:{color:'#64748b',font:{size:10}}, grid:{color:'rgba(255,255,255,0.06)'} }
+  }
+};
+
+function fmt(v, unit='百万円') { return `${v.toFixed(1)} ${unit}`; }
+function pct(v) { return `${v>=0?'+':''}${v.toFixed(1)}%`; }
+function fmtM(v) { return Math.round(v).toLocaleString(); }
+
+// ==================== RENDER DASHBOARD ====================
+function renderDashboard() {
+  const year = document.getElementById('dashYear')?.value || '2025';
+  const T = calcTotal(year);
+
+  // KPI
+  const kpiGrid = document.getElementById('kpiGrid');
+  kpiGrid.innerHTML = '';
+  const kpis = [
+    { icon:'💹', label:'累計売上高', value:`¥${fmtM(T.cum_sales)}M`, sub:`計画: ¥${fmtM(T.cum_plan)}M`, change: pct(T.cum_yoy), up: T.cum_yoy>=0, cls:'blue', bgicon:'📊' },
+    { icon:'💰', label:'累計営業利益', value:`¥${fmtM(T.cum_op)}M`, sub:`計画: ¥${fmtM(T.cum_pop)}M`, change: T.cum_pop ? pct((T.cum_op-T.cum_pop)/T.cum_pop*100) : '—', up: T.cum_op>=T.cum_pop, cls:'green', bgicon:'💰' },
+    { icon:'📐', label:'利益率', value:`${T.cum_margin.toFixed(1)}%`, sub:`前年比 ${pct(T.cum_margin - (T.cum_pop_prev?T.cum_op/T.cum_sales*100:T.cum_margin))}`, change: T.cum_margin>=15?'優良':'要注意', up: T.cum_margin>=15, cls:'purple', bgicon:'📐' },
+    { icon:'🎯', label:'計画達成率', value:`${T.cum_achieve.toFixed(1)}%`, sub:`累計${CURRENT_MONTH_IDX+1}ヶ月`, change: T.cum_achieve>=100?'達成中':'未達', up: T.cum_achieve>=100, cls: T.cum_achieve>=100?'green':'red', bgicon:'🎯' },
+    { icon:'📈', label:'前年同期比', value:pct(T.cum_yoy), sub:`前年: ¥${fmtM(T.cum_prev)}M`, change: T.cum_yoy>=0?'成長中':'減少中', up: T.cum_yoy>=0, cls: T.cum_yoy>=0?'cyan':'red', bgicon:'📈' },
+    { icon:'🏢', label:'事業数', value:`${businesses.length}`, sub:'稼働中', change:'', up:true, cls:'yellow', bgicon:'🏢' },
+  ];
+  kpis.forEach(k=>{
+    kpiGrid.innerHTML += `
+    <div class="kpi-card ${k.cls}">
+      <div class="kpi-icon">${k.icon}</div>
+      <div class="kpi-label">${k.label}</div>
+      <div class="kpi-value">${k.value}</div>
+      <div class="kpi-sub">${k.sub}</div>
+      ${k.change?`<div class="kpi-change ${k.up?'up':'down'}">${k.up?'▲':'▼'} ${k.change}</div>`:''}
+      <div class="kpi-bg-icon">${k.bgicon}</div>
+    </div>`;
+  });
+
+  // 進捗バー
+  const ps = document.getElementById('progressSection');
+  ps.innerHTML = `<div class="grid-4">` +
+    businesses.map(b=>{
+      const r = calcBiz(year,b.id);
+      if(!r) return '';
+      const achieve = r.cum_achieve;
+      const barColor = achieve>=110?'var(--green)':achieve>=100?'var(--blue)':achieve>=90?'var(--yellow)':'var(--red)';
+      return `<div>
+        <div style="display:flex;justify-content:space-between;font-size:0.8rem;margin-bottom:4px;">
+          <span style="font-weight:600;">${b.name.split('（')[0]}</span>
+          <span style="color:${barColor};font-weight:700;">${achieve.toFixed(1)}%</span>
+        </div>
+        <div class="progress-wrap">
+          <div class="progress-bar" style="width:${Math.min(achieve,130)}%;background:${barColor};"></div>
+        </div>
+        <div style="display:flex;justify-content:space-between;margin-top:4px;font-size:0.73rem;color:var(--text3);">
+          <span>実績 ¥${fmtM(r.cum_sales)}M</span>
+          <span>計画 ¥${fmtM(r.cum_plan)}M</span>
+        </div>
+      </div>`;
+    }).join('') + `</div>`;
+
+  // 売上推移
+  const labels = MONTHS.slice(0, CURRENT_MONTH_IDX+1);
+  const months = T.monthly.slice(0, CURRENT_MONTH_IDX+1);
+  createChart('chartTotalSales', {
+    type:'line',
+    data:{
+      labels,
+      datasets:[
+        { label:'実績', data:months.map(m=>m.actual_sales), borderColor:'#6366f1', backgroundColor:'rgba(99,102,241,0.1)', tension:0.3, fill:true, pointRadius:4 },
+        { label:'計画', data:months.map(m=>m.plan_sales),   borderColor:'#94a3b8', borderDash:[5,4], tension:0.3, pointRadius:3 },
+        { label:'前年', data:months.map(m=>m.prev_sales),   borderColor:'#334155', tension:0.3, pointRadius:2 },
+      ]
+    },
+    options:{...CHART_DEFAULTS}
+  });
+
+  // 利益推移
+  createChart('chartTotalProfit', {
+    type:'bar',
+    data:{
+      labels,
+      datasets:[
+        { label:'営業利益（実績）', data:months.map(m=>m.actual_op), backgroundColor:'rgba(16,185,129,0.7)', borderRadius:4 },
+        { label:'営業利益（計画）', data:months.map(m=>m.plan_op),   backgroundColor:'rgba(148,163,184,0.2)', borderRadius:4, borderColor:'#94a3b8',borderWidth:1 },
+      ]
+    },
+    options:{...CHART_DEFAULTS}
+  });
+
+  // 円グラフ
+  const bizResults = businesses.map(b=>({ name:b.name.split('（')[0], r:calcBiz(year,b.id), color:b.color }));
+  createChart('chartPie',{
+    type:'doughnut',
+    data:{
+      labels: bizResults.map(b=>b.name),
+      datasets:[{ data: bizResults.map(b=>b.r?.cum_sales||0), backgroundColor: bizResults.map(b=>b.color+'cc'), borderColor:'var(--bg)', borderWidth:3 }]
+    },
+    options:{
+      responsive:true,
+      plugins:{
+        legend:{position:'right',labels:{color:'#94a3b8',font:{size:11}}},
+        tooltip:{callbacks:{label:c=>`¥${fmtM(c.raw)}M (${(c.raw/T.cum_sales*100).toFixed(1)}%)`}}
+      }
+    }
+  });
+
+  // 利益率
+  const marginData = businesses.map(b=>{
+    const r = calcBiz(year,b.id);
+    return { label:b.name.split('（')[0], data:MONTHS.slice(0,CURRENT_MONTH_IDX+1).map((_,i)=>{
+      const m = r?.months[i];
+      return m && m.actual_sales ? m.actual_margin : null;
+    }), color:b.color };
+  });
+  createChart('chartMargin',{
+    type:'line',
+    data:{
+      labels,
+      datasets: marginData.map(d=>({
+        label:d.label, data:d.data, borderColor:d.color, tension:0.3, pointRadius:3,
+        backgroundColor:'transparent', spanGaps:false
+      }))
+    },
+    options:{
+      ...CHART_DEFAULTS,
+      plugins:{...CHART_DEFAULTS.plugins},
+      scales:{...CHART_DEFAULTS.scales, y:{...CHART_DEFAULTS.scales.y, ticks:{...CHART_DEFAULTS.scales.y.ticks, callback:v=>v+'%'}}}
+    }
+  });
+}
+
+// ==================== RENDER ALERTS ====================
+function renderAlerts() {
+  const year = '2025';
+  const thSales   = parseFloat(document.getElementById('th_sales')?.value||10);
+  const thMargin  = parseInt(document.getElementById('th_margin')?.value||3);
+  const thAchieve = parseFloat(document.getElementById('th_achieve')?.value||110);
+  const alerts = [];
+
+  businesses.forEach(b=>{
+    const r = calcBiz(year,b.id);
+    if(!r) return;
+    const bname = b.name.split('（')[0];
+
+    // 売上計画乖離
+    const salesDiff = r.cum_achieve - 100;
+    if (salesDiff < -thSales) {
+      alerts.push({ type:'red', icon:'🔴', title:`${bname} — 売上が計画を大幅に下回っています`,
+        desc:`計画対比 ${salesDiff.toFixed(1)}%（累計実績 ¥${fmtM(r.cum_sales)}M / 計画 ¥${fmtM(r.cum_plan)}M）`,
+        time:`確認月: ${MONTHS[CURRENT_MONTH_IDX]}`, biz:b.id });
+    }
+    // 達成率超過
+    if (r.cum_achieve >= thAchieve) {
+      alerts.push({ type:'green', icon:'🟢', title:`${bname} — 計画を大きく超過達成！`,
+        desc:`達成率 ${r.cum_achieve.toFixed(1)}%（実績 ¥${fmtM(r.cum_sales)}M / 計画 ¥${fmtM(r.cum_plan)}M）`,
+        time:`累計${CURRENT_MONTH_IDX+1}ヶ月時点`, biz:b.id });
+    }
+    // 利益率連続低下
+    const margins = r.months.map(m=>m.actual_margin).slice(0,CURRENT_MONTH_IDX+1);
+    let dec = 0, maxDec = 0;
+    for(let i=1;i<margins.length;i++){
+      if(margins[i]<margins[i-1]) { dec++; maxDec=Math.max(maxDec,dec); } else { dec=0; }
+    }
+    if(maxDec >= thMargin) {
+      alerts.push({ type:'yellow', icon:'🟡', title:`${bname} — 利益率が${maxDec}ヶ月連続で低下`,
+        desc:`現在の利益率: ${margins[margins.length-1].toFixed(1)}%。コスト構造の見直しを推奨します。`,
+        time:'', biz:b.id });
+    }
+    // 前年割れ
+    if(r.cum_yoy < -5) {
+      alerts.push({ type:'red', icon:'🔴', title:`${bname} — 前年同期比 ${pct(r.cum_yoy)} と大幅減少`,
+        desc:`前年: ¥${fmtM(r.cum_prev)}M → 今年: ¥${fmtM(r.cum_sales)}M`,
+        time:'', biz:b.id });
+    }
+  });
+
+  // アラートバッジ更新
+  const redAlerts = alerts.filter(a=>a.type==='red').length;
+  document.getElementById('alertBadge').textContent = redAlerts;
+  document.getElementById('alertBadge').style.display = redAlerts?'inline':'none';
+
+  const el = document.getElementById('alertList');
+  if(!el) return;
+  if(!alerts.length) {
+    el.innerHTML = `<div class="empty-state"><div class="icon">✅</div><div>現在アラートはありません</div></div>`;
+    return;
+  }
+  el.innerHTML = alerts.map(a=>`
+    <div class="alert alert-${a.type}">
+      <div class="alert-icon">${a.icon}</div>
+      <div class="alert-body">
+        <div class="alert-title">${a.title}</div>
+        <div class="alert-desc">${a.desc}</div>
+        ${a.time?`<div class="alert-time">${a.time}</div>`:''}
+      </div>
+      <button class="btn btn-outline btn-sm" onclick="showPage('analysis');selectBizTab('${a.biz}')">詳細 →</button>
+    </div>`).join('');
+}
+
+// ==================== RENDER ANALYSIS ====================
+let currentBizId = null;
+function renderAnalysis() {
+  const year = document.getElementById('analysisYear')?.value || '2025';
+  const tabRow = document.getElementById('bizTabs');
+  tabRow.innerHTML = businesses.map(b=>
+    `<div class="biz-tab ${b.id===currentBizId?'active':''}" onclick="selectBizTab('${b.id}')" data-id="${b.id}">${b.name.split('（')[0]}</div>`
+  ).join('');
+  if(!currentBizId || !businesses.find(b=>b.id===currentBizId)) currentBizId = businesses[0]?.id;
+  renderBizAnalysis(year, currentBizId);
+}
+
+function selectBizTab(id) {
+  currentBizId = id;
+  document.querySelectorAll('.biz-tab').forEach(el=>{
+    el.classList.toggle('active', el.dataset.id===id);
+  });
+  const year = document.getElementById('analysisYear')?.value||'2025';
+  renderBizAnalysis(year, id);
+}
+
+function renderBizAnalysis(year, bizId) {
+  const biz = businesses.find(b=>b.id===bizId);
+  if(!biz) return;
+  const r = calcBiz(year, bizId);
+  if(!r) return;
+  const el = document.getElementById('analysisContent');
+  const color = biz.color;
+  const labels = MONTHS.slice(0,CURRENT_MONTH_IDX+1);
+
+  el.innerHTML = `
+  <!-- KPIs -->
+  <div class="kpi-grid" style="grid-template-columns:repeat(4,1fr);">
+    <div class="kpi-card blue"><div class="kpi-icon">💹</div><div class="kpi-label">累計売上</div><div class="kpi-value">¥${fmtM(r.cum_sales)}M</div><div class="kpi-sub">計画: ¥${fmtM(r.cum_plan)}M</div><div class="kpi-bg-icon">💹</div></div>
+    <div class="kpi-card green"><div class="kpi-icon">💰</div><div class="kpi-label">累計営業利益</div><div class="kpi-value">¥${fmtM(r.cum_op)}M</div><div class="kpi-sub">計画: ¥${fmtM(r.cum_pop)}M</div><div class="kpi-bg-icon">💰</div></div>
+    <div class="kpi-card purple"><div class="kpi-icon">📐</div><div class="kpi-label">利益率</div><div class="kpi-value">${r.cum_margin.toFixed(1)}%</div><div class="kpi-sub">計画: ${r.cum_pop&&r.cum_plan?(r.cum_pop/r.cum_plan*100).toFixed(1):0}%</div><div class="kpi-bg-icon">📐</div></div>
+    <div class="kpi-card ${r.cum_achieve>=100?'green':'red'}"><div class="kpi-icon">🎯</div><div class="kpi-label">計画達成率</div><div class="kpi-value">${r.cum_achieve.toFixed(1)}%</div><div class="kpi-sub">前年比: ${pct(r.cum_yoy)}</div><div class="kpi-bg-icon">🎯</div></div>
+  </div>
+  <!-- 4チャート -->
+  <div class="grid-2 section">
+    <div class="chart-card"><div class="chart-title">📊 月次売上推移</div><canvas id="ac_sales" height="200"></canvas></div>
+    <div class="chart-card"><div class="chart-title">💰 月次営業利益推移</div><canvas id="ac_profit" height="200"></canvas></div>
+  </div>
+  <div class="grid-2 section">
+    <div class="chart-card"><div class="chart-title">🎯 計画 vs 実績（売上）</div><canvas id="ac_vs" height="200"></canvas></div>
+    <div class="chart-card"><div class="chart-title">📈 前年同期比（売上）</div><canvas id="ac_yoy" height="200"></canvas></div>
+  </div>
+  `;
+
+  const ms = r.months.slice(0,CURRENT_MONTH_IDX+1);
+  createChart('ac_sales',{type:'line',data:{labels,datasets:[
+    {label:'実績',data:ms.map(m=>m.actual_sales),borderColor:color,backgroundColor:color+'22',tension:0.3,fill:true,pointRadius:4},
+    {label:'計画',data:ms.map(m=>m.plan_sales),borderColor:'#94a3b8',borderDash:[5,4],tension:0.3,pointRadius:3},
+    {label:'前年',data:ms.map(m=>m.prev_sales),borderColor:'#334155',tension:0.3,pointRadius:2},
+  ]},options:CHART_DEFAULTS});
+
+  createChart('ac_profit',{type:'bar',data:{labels,datasets:[
+    {label:'実績OP',data:ms.map(m=>m.actual_op),backgroundColor:color+'bb',borderRadius:4},
+    {label:'計画OP',data:ms.map(m=>m.plan_op),backgroundColor:'rgba(148,163,184,0.2)',borderColor:'#94a3b8',borderWidth:1,borderRadius:4},
+  ]},options:CHART_DEFAULTS});
+
+  createChart('ac_vs',{type:'bar',data:{labels,datasets:[
+    {label:'実績',data:ms.map(m=>m.actual_sales),backgroundColor:color+'bb',borderRadius:4},
+    {label:'計画',data:ms.map(m=>m.plan_sales),backgroundColor:'rgba(148,163,184,0.3)',borderRadius:4},
+  ]},options:{...CHART_DEFAULTS,plugins:{...CHART_DEFAULTS.plugins,legend:{...CHART_DEFAULTS.plugins.legend}}}});
+
+  createChart('ac_yoy',{type:'line',data:{labels,datasets:[
+    {label:'前年同期比(%)',data:ms.map(m=>m.yoy_sales),borderColor:color,backgroundColor:color+'22',tension:0.3,fill:true,pointRadius:4},
+  ]},options:{...CHART_DEFAULTS,scales:{...CHART_DEFAULTS.scales,y:{...CHART_DEFAULTS.scales.y,ticks:{...CHART_DEFAULTS.scales.y.ticks,callback:v=>v+'%'}}}}});
+}
+
+// ==================== RENDER RANKING ====================
+function renderRanking() {
+  const year = document.getElementById('rankingYear')?.value||'2025';
+  const data = businesses.map(b=>{
+    const r = calcBiz(year,b.id);
+    return { ...b, r, shortName:b.name.split('（')[0] };
+  }).filter(b=>b.r);
+
+  function makeRank(title, icon, key, fmt, containerId) {
+    const sorted = [...data].sort((a,b)=>b.r[key]-a.r[key]);
+    const max = sorted[0]?.r[key]||1;
+    document.getElementById(containerId).innerHTML = `
+    <div class="rank-card">
+      <div class="rank-header">${icon} ${title}</div>
+      ${sorted.map((b,i)=>{
+        const val = b.r[key];
+        return `<div class="rank-row">
+          <div class="rank-num ${['r1','r2','r3','rn'][Math.min(i,3)]}">${i+1}</div>
+          <div class="rank-name">${b.shortName}</div>
+          <div class="rank-bar-wrap"><div class="rank-bar" style="width:${Math.max(val/max*100,2)}%;background:${b.color};"></div></div>
+          <div class="rank-value" style="color:${b.color};">${fmt(val)}</div>
+        </div>`;
+      }).join('')}
+    </div>`;
+  }
+
+  makeRank('売上ランキング','💹','cum_sales',v=>`¥${fmtM(v)}M`,'rankSales');
+  makeRank('利益ランキング','💰','cum_op',v=>`¥${fmtM(v)}M`,'rankProfit');
+  makeRank('利益率ランキング','📐','cum_margin',v=>`${v.toFixed(1)}%`,'rankMargin');
+  makeRank('成長率ランキング','📈','cum_yoy',v=>pct(v),'rankGrowth');
+}
+
+// ==================== RENDER FORECAST ====================
+function renderForecast() {
+  const year = document.getElementById('forecastYear')?.value||'2025';
+  const total = calcTotal(year);
+  const filled = CURRENT_MONTH_IDX + 1;
+  const remaining = 12 - filled;
+
+  // 直近3ヶ月平均ペース
+  const biz3avg = (arr,n)=>{
+    const slice = arr.filter(v=>v>0).slice(-n);
+    return slice.reduce((a,b)=>a+b,0)/slice.length;
+  };
+
+  const el = document.getElementById('forecastContent');
+  const bizForecasts = businesses.map(b=>{
+    const r = calcBiz(year,b.id);
+    if(!r) return null;
+    const d = plData[year][b.id];
+    const avgSales = biz3avg(d.actual_sales.slice(0,filled), 3);
+    const avgOp    = biz3avg(r.months.slice(0,filled).map(m=>m.actual_op), 3);
+    const forecastSales = r.cum_sales + avgSales * remaining;
+    const forecastOp    = r.cum_op   + avgOp   * remaining;
+    const forecastMargin = forecastSales ? forecastOp/forecastSales*100 : 0;
+    const achieveF = r.full_plan ? forecastSales/r.full_plan*100 : 0;
+    return { ...b, r, forecastSales, forecastOp, forecastMargin, achieveF, shortName:b.name.split('（')[0] };
+  }).filter(Boolean);
+
+  const totalForecastSales = sum(bizForecasts.map(b=>b.forecastSales));
+  const totalForecastOp    = sum(bizForecasts.map(b=>b.forecastOp));
+  const totalForecastM     = totalForecastSales ? totalForecastOp/totalForecastSales*100 : 0;
+  const totalAchieve = total.full_plan ? totalForecastSales/total.full_plan*100 : 0;
+
+  el.innerHTML = `
+  <!-- 全社予測 -->
+  <div class="section">
+    <div class="section-title mb-8" style="margin-bottom:14px;">🔮 全社年度着地予測（${year}年度）</div>
+    <div class="forecast-grid">
+      <div class="forecast-card">
+        <div class="forecast-label">📊 予測年末売上高</div>
+        <div class="forecast-value">¥${fmtM(totalForecastSales)}M</div>
+        <div class="forecast-vs">計画 ¥${fmtM(total.full_plan)}M（達成率 ${totalAchieve.toFixed(1)}%）</div>
+      </div>
+      <div class="forecast-card">
+        <div class="forecast-label">💰 予測年末営業利益</div>
+        <div class="forecast-value" style="color:var(--green);">¥${fmtM(totalForecastOp)}M</div>
+        <div class="forecast-vs">計画 ¥${fmtM(total.full_plan_op)}M</div>
+      </div>
+      <div class="forecast-card">
+        <div class="forecast-label">📐 予測年末利益率</div>
+        <div class="forecast-value" style="color:var(--accent2);">${totalForecastM.toFixed(1)}%</div>
+        <div class="forecast-vs">現状ペース継続時の推計</div>
+      </div>
+    </div>
+    <div class="chart-card section">
+      <div class="chart-title">📊 予測チャート（売上）— 実績 + 予測延長</div>
+      <canvas id="forecastChart" height="200"></canvas>
+    </div>
+  </div>
+  <!-- 事業別 -->
+  <div class="section">
+    <div class="section-title" style="margin-bottom:14px;">🏢 事業別年度着地予測</div>
+    <div class="chart-card">
+      <table class="summary-table">
+        <thead>
+          <tr>
+            <th style="text-align:left;">事業</th>
+            <th>予測売上</th><th>計画売上</th><th>予測達成率</th>
+            <th>予測利益</th><th>予測利益率</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${bizForecasts.map(b=>`
+          <tr>
+            <td><span style="display:inline-block;width:10px;height:10px;border-radius:3px;background:${b.color};margin-right:8px;"></span>${b.shortName}</td>
+            <td style="text-align:right;font-weight:700;">¥${fmtM(b.forecastSales)}M</td>
+            <td style="text-align:right;color:var(--text2);">¥${fmtM(b.r.full_plan)}M</td>
+            <td style="text-align:right;" class="${b.achieveF>=100?'green-text':'red-text'}">${b.achieveF.toFixed(1)}%</td>
+            <td style="text-align:right;font-weight:700;color:var(--green);">¥${fmtM(b.forecastOp)}M</td>
+            <td style="text-align:right;color:var(--accent);">${b.forecastMargin.toFixed(1)}%</td>
+          </tr>`).join('')}
+        </tbody>
+      </table>
+    </div>
+  </div>
+  `;
+
+  // 予測チャート（実績 + 予測）
+  const allLabels = [...MONTHS];
+  const bizForecastLines = bizForecasts.map(b=>{
+    const r = calcBiz(year,b.id);
+    const d = plData[year][b.id];
+    const avg = biz3avg(d.actual_sales.slice(0,filled),3);
+    const actuals = d.actual_sales.map((v,i)=>i<filled?v:null);
+    const forecast = d.actual_sales.map((v,i)=>{
+      if(i<filled) return null;
+      return r.cum_sales + avg*(i-filled+1);
+    });
+    return { label:b.shortName, color:b.color, actuals, forecast };
+  });
+
+  const totalActuals = allLabels.map((_,i)=> i<filled ? sum(businesses.map(b=>plData[year][b.id]?.actual_sales[i]||0)) : null);
+  const totalForecastArr = allLabels.map((_,i)=>{
+    if(i<filled) return null;
+    const avg3 = biz3avg(totalActuals.filter(v=>v!==null), 3);
+    return sum(totalActuals.filter(v=>v!==null)) + avg3*(i-filled+1);
+  });
+
+  createChart('forecastChart',{
+    type:'line',
+    data:{
+      labels:allLabels,
+      datasets:[
+        { label:'全社実績', data:totalActuals, borderColor:'#6366f1', backgroundColor:'rgba(99,102,241,0.1)', tension:0.3, fill:true, pointRadius:4 },
+        { label:'全社予測', data:totalForecastArr, borderColor:'#6366f1', borderDash:[6,4], tension:0.3, pointRadius:3, backgroundColor:'rgba(99,102,241,0.05)', fill:true },
+        ...bizForecasts.map(b=>({
+          label:`${b.shortName}(予測)`, data:b.forecastSales?allLabels.map((_,i)=>i<filled?null:(b.r.cum_sales+biz3avg(plData[year][b.id].actual_sales.slice(0,filled),3)*(i-filled+1))):new Array(12).fill(null),
+          borderColor:b.color+'88', borderDash:[3,3], tension:0.3, pointRadius:2
+        }))
+      ]
+    },
+    options:{...CHART_DEFAULTS}
+  });
+}
+
+// ==================== RENDER INPUT ====================
+function renderInputPage() {
+  const year = document.getElementById('inputYear')?.value||'2025';
+  const el = document.getElementById('inputContent');
+  el.innerHTML = '';
+
+  businesses.forEach(b=>{
+    const d = plData[year][b.id];
+    if(!d) return;
+
+    const rows = [
+      { key:'actual_sales', label:'売上高（実績）', type:'actual' },
+      { key:'plan_sales',   label:'売上高（計画）', type:'plan' },
+      { key:'prev_sales',   label:'売上高（前年）', type:'prev' },
+      { key:'actual_cogs',  label:'売上原価（実績）', type:'actual' },
+      { key:'plan_cogs',    label:'売上原価（計画）', type:'plan' },
+      { key:'actual_sg',    label:'販管費（実績）', type:'actual' },
+      { key:'plan_sg',      label:'販管費（計画）', type:'plan' },
+    ];
+
+    const tableRows = rows.map(row=>{
+      const vals = d[row.key]||Array(12).fill(0);
+      const cells = vals.map((v,m)=>
+        `<td><input type="number" value="${v||''}" placeholder="0"
+          onchange="updateData('${year}','${b.id}','${row.key}',${m},this.value)"
+          ${row.type==='prev'?'style="background:var(--bg2);color:var(--text3);"':''}
+        ></td>`
+      ).join('');
+      return `<tr><td class="label">${row.label}</td>${cells}</tr>`;
+    }).join('');
+
+    // 自動計算行
+    const r = calcBiz(year,b.id);
+    const autoRows = ['actual_op','plan_op','actual_margin','achieve_rate','yoy_sales'].map(key=>{
+      const labels2 = {actual_op:'営業利益（自動計算）',plan_op:'計画営業利益（自動計算）',actual_margin:'利益率%（自動）',achieve_rate:'達成率%（自動）',yoy_sales:'前年比%（自動）'};
+      const fmtV = v=>key.includes('margin')||key.includes('rate')||key.includes('yoy')?v.toFixed(1)+'%':fmtM(v);
+      const colorClass = v=>key==='actual_margin'?(v<0?'red-text':v>20?'green-text':''):(key==='achieve_rate'?(v>=100?'green-text':'red-text'):'');
+      const cells = r.months.map(m=>`<td class="highlight ${colorClass(m[key])}">${fmtV(m[key])}</td>`).join('');
+      return `<tr><td class="label" style="color:var(--accent);">${labels2[key]}</td>${cells}</tr>`;
+    }).join('');
+
+    el.innerHTML += `
+    <div class="input-section">
+      <div class="input-header">
+        <div class="input-title"><span style="display:inline-block;width:10px;height:10px;border-radius:3px;background:${b.color};"></span> ${b.name}</div>
+        <span class="badge badge-purple">達成率 ${r.cum_achieve.toFixed(1)}% | 利益率 ${r.cum_margin.toFixed(1)}%</span>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th class="left" style="min-width:160px;">項目</th>
+              ${MONTHS.map(m=>`<th>${m}</th>`).join('')}
+            </tr>
+          </thead>
+          <tbody>
+            ${tableRows}
+            <tr><td colspan="13" style="background:var(--bg2);padding:4px;"></td></tr>
+            ${autoRows}
+          </tbody>
+        </table>
+      </div>
+    </div>`;
+  });
+}
+
+function updateData(year, bizId, key, month, value) {
+  if(!plData[year]) plData[year] = {};
+  if(!plData[year][bizId]) plData[year][bizId] = {};
+  if(!plData[year][bizId][key]) plData[year][bizId][key] = Array(12).fill(0);
+  plData[year][bizId][key][month] = parseFloat(value)||0;
+  // リアルタイムで計算行を更新（遅延）
+  clearTimeout(window._inputTimer);
+  window._inputTimer = setTimeout(()=>renderInputPage(), 800);
+}
+
+// ==================== RENDER SETTINGS ====================
+function renderSettings() {
+  const el = document.getElementById('bizList');
+  el.innerHTML = businesses.map((b,i)=>`
+    <div style="display:flex;align-items:center;gap:12px;padding:8px 0;border-bottom:1px solid var(--border);">
+      <input type="color" value="${b.color}" onchange="businesses[${i}].color=this.value;renderAll();" style="width:30px;height:30px;border:none;background:none;cursor:pointer;">
+      <input type="text" value="${b.name}" style="flex:1;background:var(--bg3);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:6px 10px;font-size:0.85rem;"
+        onchange="businesses[${i}].name=this.value;renderAll();">
+      ${businesses.length>1?`<button class="btn btn-outline btn-sm" onclick="removeBusiness(${i})" style="color:var(--red);">削除</button>`:''}
+    </div>
+  `).join('') + '<div style="margin-top:10px;"><button class="btn btn-primary btn-sm" onclick="renderAll()">反映</button></div>';
+}
+
+function addBusiness() {
+  const id = 'biz'+(Date.now());
+  businesses.push({ id, name:'新規事業', color:'#ec4899' });
+  YEARS.forEach(y=>{ if(!plData[y]) plData[y]={}; plData[y][id]={ actual_sales:makeMonths(0),plan_sales:makeMonths(0),prev_sales:makeMonths(0),actual_cogs:makeMonths(0),plan_cogs:makeMonths(0),prev_cogs:makeMonths(0),actual_sg:makeMonths(0),plan_sg:makeMonths(0),prev_sg:makeMonths(0) }; });
+  renderSettings();
+}
+function removeBusiness(i) {
+  if(!confirm(`「${businesses[i].name}」を削除しますか？`)) return;
+  const id = businesses[i].id;
+  businesses.splice(i,1);
+  YEARS.forEach(y=>{ delete plData[y]?.[id]; });
+  renderSettings();
+  renderAll();
+}
+
+// ==================== PAGE NAVIGATION ====================
+function showPage(id) {
+  document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active'));
+  document.getElementById('page-'+id)?.classList.add('active');
+  document.querySelector(`.nav-item[onclick*="${id}"]`)?.classList.add('active');
+  if(id==='dashboard') renderDashboard();
+  if(id==='alerts')    renderAlerts();
+  if(id==='analysis')  renderAnalysis();
+  if(id==='ranking')   renderRanking();
+  if(id==='forecast')  renderForecast();
+  if(id==='input')     renderInputPage();
+  if(id==='settings')  renderSettings();
+}
+
+function renderAll() {
+  const active = document.querySelector('.page.active')?.id?.replace('page-','');
+  if(active) showPage(active);
+  // 常にアラートバッジを更新
+  renderAlerts();
+}
+
+// ==================== INIT ====================
+document.addEventListener('DOMContentLoaded', ()=>{
+  renderDashboard();
+  renderAlerts();
+});
+</script>
+</body>
+</html>
