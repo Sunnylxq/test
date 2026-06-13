@@ -361,9 +361,9 @@ body{font-family:'UD デジタル 教科書体 NK','UDDigitalKyokasho-NK','Hirag
 
       <!-- 達成率 -->
       <div class="card">
-        <div class="card-title" style="margin-bottom:4px">🎯 事業別 売上計画達成率（累計実績 ÷ 累計計画）</div>
-        <div style="font-size:.72rem;color:var(--muted);margin-bottom:14px">各事業の累計売上実績が累計計画に対して何%達成しているか</div>
-        <div id="bizProgress"></div>
+        <div class="card-title" style="margin-bottom:2px">🎯 事業別 年間計画進捗率（累計実績 ÷ 年間計画）</div>
+        <div style="font-size:.72rem;color:var(--muted);margin-bottom:14px">各事業の累計実績が年間計画に対して何%消化しているか。破線は経過時間の目安</div>
+        <canvas id="bizProgressChart" height="320"></canvas>
       </div>
     </div>
 
@@ -851,30 +851,53 @@ function renderDashboard(){
     datasets:[{data:bizSums.map(b=>Math.round(b.sum)),backgroundColor:COLORS.map(c=>c+'cc'),borderColor:'#0f1117',borderWidth:2}]
   },options:{responsive:true,plugins:{legend:{position:'right',labels:{color:'#94a3b8',font:{size:10},boxWidth:10}},tooltip:{callbacks:{label:ctx=>`${ctx.label}: ${fmtM(ctx.raw)} (${(ctx.raw/total_sum*100).toFixed(1)}%)`}}}}});
 
-  // 事業別達成率
-  const cumBizSales = D.businesses.map(b=>b.monthly.slice(0,fi+1).reduce((a,v)=>a+v,0));
-  const cumBizPlan  = D.businesses.map(b=>{
-    if(D.biz_detail && D.biz_detail[b.name] && D.biz_detail[b.name]['売上']){
-      return D.biz_detail[b.name]['売上'].plan.slice(0,fi+1).reduce((a,v)=>a+v,0);
-    }
-    return 0;
+  // 事業別 年間計画進捗率（3指標）
+  const timeElapsed = (fi + 1) / 12 * 100; // 経過時間 %
+  const bizNames = D.businesses.map(b => b.name);
+  const progressSales = [], progressSG = [], progressOP = [];
+  bizNames.forEach(name => {
+    const bd = D.biz_detail && D.biz_detail[name];
+    const getRate = (metric) => {
+      if (!bd || !bd[metric]) return 0;
+      const cum = bd[metric].actual.slice(0, fi + 1).reduce((a, v) => a + v, 0);
+      const annualPlan = bd[metric].plan.reduce((a, v) => a + v, 0);
+      return annualPlan > 0 ? +(cum / annualPlan * 100).toFixed(1) : 0;
+    };
+    progressSales.push(getRate('売上'));
+    progressSG.push(getRate('販管費'));
+    progressOP.push(getRate('貢献利益'));
   });
-  const bp = document.getElementById('bizProgress');
-  bp.innerHTML = D.businesses.map((b,i)=>{
-    const actual = cumBizSales[i];
-    const plan   = cumBizPlan[i] || actual*0.9;
-    const rate   = plan > 0 ? actual/plan*100 : 0;
-    const barC   = rate>=110?'var(--green)':rate>=100?'var(--blue)':rate>=90?'var(--yellow)':'var(--red)';
-    const textC  = rate>=110?'var(--green)':rate>=100?'var(--blue)':rate>=90?'var(--yellow)':'var(--red)';
-    return `<div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
-      <div style="min-width:120px;font-size:.78rem;font-weight:600;color:var(--text)">${b.name}</div>
-      <div style="flex:1">
-        <div class="progress-wrap"><div class="progress-bar" style="width:${Math.min(rate,130)}%;background:${barC}"></div></div>
-      </div>
-      <div style="min-width:120px;font-size:.75rem;color:var(--subtle)">実績 ${fmtM(actual)}</div>
-      <div style="min-width:50px;font-size:.78rem;font-weight:700;color:${textC};text-align:right">${rate>0?pct(rate):'—'}</div>
-    </div>`;
-  }).join('');
+  mkChart('bizProgressChart', {
+    type: 'bar',
+    data: {
+      labels: bizNames,
+      datasets: [
+        { label: '売上', data: progressSales, backgroundColor: 'rgba(99,102,241,.75)', borderRadius: 3 },
+        { label: '販管費', data: progressSG, backgroundColor: 'rgba(251,146,60,.75)', borderRadius: 3 },
+        { label: '貢献利益', data: progressOP, backgroundColor: 'rgba(16,185,129,.75)', borderRadius: 3 },
+        // 経過時間ライン（scatter で点線代わり）
+        { label: `経過時間 ${timeElapsed.toFixed(0)}%`, data: bizNames.map(() => timeElapsed),
+          type: 'line', borderColor: 'rgba(250,204,21,.8)', borderDash: [5, 4], borderWidth: 1.5,
+          pointRadius: 0, fill: false, tension: 0, order: -1 },
+      ]
+    },
+    options: {
+      indexAxis: 'y',
+      responsive: true,
+      plugins: {
+        legend: { position: 'top', labels: { color: '#94a3b8', font: { size: 11 }, boxWidth: 12 } },
+        tooltip: { callbacks: { label: ctx => ctx.dataset.type === 'line' ? `${ctx.dataset.label}` : `${ctx.dataset.label}: ${ctx.raw}%` } },
+      },
+      scales: {
+        x: {
+          min: 0, max: Math.max(120, ...progressSales, ...progressSG, ...progressOP) + 5,
+          ticks: { color: '#64748b', font: { size: 10 }, callback: v => v + '%' },
+          grid: { color: 'rgba(255,255,255,.05)' }
+        },
+        y: { ticks: { color: '#94a3b8', font: { size: 10 } }, grid: { display: false } }
+      }
+    }
+  });
 }
 
 // ===== PL TABLE =====
