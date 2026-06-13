@@ -500,7 +500,7 @@ function renderDashboard(){
   const kpis = [
     {icon:'💹',label:'累計売上高',value:fmtM(cumSales),sub:'計画 '+fmtM(cumPlanSales),change:achieveRate-100,cls:'blue'},
     {icon:'💰',label:'累計営業利益',value:fmtM(cumOP),sub:'計画 '+fmtM(cumPlanOP),change:opAchieve-100,cls:'green'},
-    {icon:'📐',label:'利益率',value:pct(cumMargin),sub:'累計'+（fi+1)+'ヶ月',change:cumMargin-15,cls:'purple'},
+    {icon:'📐',label:'利益率',value:pct(cumMargin),sub:'累計'+(fi+1)+'ヶ月',change:cumMargin-15,cls:'purple'},
     {icon:'🎯',label:'計画達成率（売上）',value:pct(achieveRate),sub:fi+1+'ヶ月累計',change:achieveRate-100,cls:achieveRate>=100?'green':'red'},
     {icon:'📈',label:'前年同期比',value:chg(yoy),sub:'前年 '+fmtM(cumPrevSales),change:yoy,cls:yoy>=0?'cyan':'red'},
     {icon:'🏢',label:'稼働事業数',value:D.businesses.length+'事業',sub:'直轄事業',change:0,cls:'yellow'},
