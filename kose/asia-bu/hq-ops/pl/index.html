@@ -72,7 +72,7 @@ body{font-family:'UD デジタル 教科書体 NK','UDDigitalKyokasho-NK','Hirag
 .year-select:focus{border-color:var(--accent)}
 /* ===== BIZ SUB TABS ===== */
 .biz-layout{display:flex;gap:16px;align-items:flex-start}
-.biz-tabs{display:flex;flex-direction:column;gap:2px;width:172px;flex-shrink:0;background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:8px;position:sticky;top:72px;max-height:calc(100vh - 100px);overflow-y:auto}
+.biz-tabs{display:flex;flex-direction:column;gap:2px;width:140px;flex-shrink:0;background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:6px;position:sticky;top:72px;max-height:calc(100vh - 100px);overflow-y:auto}
 .biz-tabs::-webkit-scrollbar{width:3px}
 .biz-tabs::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px}
 .biz-tab{padding:8px 12px;font-size:.78rem;font-weight:600;color:var(--muted);cursor:pointer;border-radius:7px;border-left:2px solid transparent;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;transition:all .15s}
@@ -82,11 +82,11 @@ body{font-family:'UD デジタル 教科書体 NK','UDDigitalKyokasho-NK','Hirag
 .biz-section{display:none}
 .biz-section.active{display:block}
 /* ===== BIZ DATA TABLE ===== */
-.biz-tbl{width:100%;border-collapse:collapse;font-size:.76rem;margin-bottom:0}
-.biz-tbl th{padding:7px 10px;text-align:right;color:var(--muted);font-weight:600;border-bottom:1px solid var(--border);background:var(--bg3);white-space:nowrap}
-.biz-tbl th:first-child{text-align:left;min-width:90px;position:sticky;left:0;background:var(--bg3);z-index:1}
-.biz-tbl td{padding:6px 10px;text-align:right;border-bottom:1px solid rgba(46,50,80,.4);white-space:nowrap}
-.biz-tbl td:first-child{text-align:left;position:sticky;left:0;background:var(--card);z-index:1}
+.biz-tbl{width:100%;border-collapse:collapse;font-size:.68rem;margin-bottom:0}
+.biz-tbl th{padding:4px 5px;text-align:right;color:var(--muted);font-weight:600;border-bottom:1px solid var(--border);background:var(--bg3);white-space:nowrap}
+.biz-tbl th:first-child{text-align:left;min-width:72px;position:sticky;left:0;background:var(--bg3);z-index:1}
+.biz-tbl td{padding:3px 5px;text-align:right;border-bottom:1px solid rgba(46,50,80,.4);white-space:nowrap}
+.biz-tbl td:first-child{text-align:left;position:sticky;left:0;background:var(--card);z-index:1;min-width:72px}
 .biz-tbl tr.actual td{color:var(--text)}
 .biz-tbl tr.plan td{color:var(--muted)}
 .biz-tbl tr.prev td{color:var(--muted);font-style:italic}
@@ -98,7 +98,7 @@ body{font-family:'UD デジタル 教科書体 NK','UDDigitalKyokasho-NK','Hirag
 .biz-tbl td.editable{cursor:pointer;transition:background .1s}
 .biz-tbl td.editable:hover{background:rgba(99,102,241,.12)!important;outline:1px solid rgba(99,102,241,.4)}
 .biz-tbl td.editing{padding:0!important}
-.biz-tbl td.editing input{width:100%;min-width:80px;background:rgba(99,102,241,.18);border:1.5px solid var(--accent);border-radius:4px;padding:5px 8px;color:var(--text);font-size:.76rem;text-align:right;outline:none}
+.biz-tbl td.editing input{width:100%;min-width:60px;background:rgba(99,102,241,.18);border:1.5px solid var(--accent);border-radius:4px;padding:2px 4px;color:var(--text);font-size:.68rem;text-align:right;outline:none}
 .biz-tbl tr.forecast td{color:#a78bfa}
 .forecast-section{margin-top:16px}
 .forecast-kpi-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:16px}
