@@ -19,9 +19,10 @@ body{font-family:'UD デジタル 教科書体 NK','UDDigitalKyokasho-NK','Hirag
 
 /* ===== LOGIN ===== */
 #loginScreen{
-  display:flex;align-items:center;justify-content:center;min-height:100vh;
+  display:none;align-items:center;justify-content:center;min-height:100vh;
   background:radial-gradient(ellipse at 30% 50%,rgba(99,102,241,.15) 0%,transparent 60%);
 }
+#loginScreen.visible{display:flex;}
 .login-box{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:40px;width:100%;max-width:400px;box-shadow:0 20px 60px rgba(0,0,0,.6)}
 .login-logo{text-align:center;margin-bottom:24px}
 .login-logo .icon{font-size:3rem;margin-bottom:8px}
@@ -560,11 +561,11 @@ function doLogout(){
   localStorage.removeItem('plUser');
   currentUser=null;
   document.getElementById('app').style.display='none';
-  document.getElementById('loginScreen').style.display='flex';
+  document.getElementById('loginScreen').classList.add('visible');
 }
 
 function startApp(){
-  document.getElementById('loginScreen').style.display='none';
+  document.getElementById('loginScreen').classList.remove('visible');
   document.getElementById('app').style.display='flex';
   document.getElementById('app').style.flexDirection='column';
   document.getElementById('userAvatar').textContent = currentUser.avatar;
@@ -1451,7 +1452,7 @@ document.addEventListener('click', e => {
   if(saved){
     try{ currentUser = JSON.parse(saved); startApp(); return; }catch(e){}
   }
-  document.getElementById('loginScreen').style.display='flex';
+  document.getElementById('loginScreen').classList.add('visible');
 })();
 </script>
 </body>
