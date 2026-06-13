@@ -102,6 +102,14 @@ body{font-family:'UD デジタル 教科書体 NK','UDDigitalKyokasho-NK','Hirag
 .biz-tbl tr.forecast td{color:#a78bfa}
 .biz-tbl td.fc-manual{outline:1px dashed #fbbf2488}
 .forecast-section{margin-top:16px}
+.analysis-section{margin-top:16px}
+.analysis-current{background:var(--bg2);border:1px solid rgba(99,102,241,.3);border-radius:10px;padding:14px}
+.analysis-current textarea{width:100%;background:transparent;border:none;color:var(--text);font-family:inherit;font-size:.8rem;line-height:1.6;resize:vertical;outline:none;min-height:80px}
+.analysis-month-label{font-size:.72rem;font-weight:700;color:var(--accent);margin-bottom:6px}
+.analysis-archive{margin-top:12px;display:flex;flex-direction:column;gap:6px}
+.analysis-archive-item{background:var(--bg3);border-left:3px solid var(--border);border-radius:0 6px 6px 0;padding:8px 12px}
+.analysis-archive-item .arc-month{font-size:.68rem;font-weight:700;color:var(--muted);margin-bottom:3px}
+.analysis-archive-item .arc-text{font-size:.77rem;color:var(--subtle);white-space:pre-wrap;line-height:1.5}
 .forecast-kpi-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:16px}
 .forecast-kpi{background:var(--bg3);border:1px solid rgba(99,102,241,.2);border-radius:8px;padding:12px;text-align:center}
 .forecast-kpi .val{font-size:1.1rem;font-weight:800;color:#a78bfa}
@@ -1070,6 +1078,42 @@ function onYearChange(year){
   renderAll();
 }
 
+// ===== 差異分析 =====
+function analysisKey(name, year, mi){ return `bizAnalysis_${year}_${name}_${mi}`; }
+function getAnalysis(name, mi){ return localStorage.getItem(analysisKey(name, currentYear, mi)) || ''; }
+function saveAnalysis(name, mi, text){ localStorage.setItem(analysisKey(name, currentYear, mi), text); }
+
+function renderAnalysisSection(name, fi, months){
+  const cur = getAnalysis(name, fi);
+  // 过去月アーカイブ（fi-1〜0、テキストがあるもの）
+  const archives = [];
+  for(let mi = fi-1; mi >= 0; mi--){
+    const t = getAnalysis(name, mi);
+    if(t.trim()) archives.push({mi, month: months[mi], text: t});
+  }
+  return `
+    <div class="analysis-section">
+      <div style="font-size:.8rem;font-weight:700;color:var(--text);margin-bottom:10px">📝 差異分析・コメント</div>
+      <div class="analysis-current">
+        <div class="analysis-month-label">${months[fi]} （今月 — 編集可）</div>
+        <textarea id="analysisInput_${name.replace(/[^\w]/g,'_')}"
+          placeholder="売上差異の要因、施策効果、来月の見通しなど..."
+          onblur="saveAnalysis('${name.replace(/'/g,"\\'")}', ${fi}, this.value)"
+          onkeydown="if(event.ctrlKey&&event.key==='Enter')this.blur()"
+        >${cur}</textarea>
+        <div style="font-size:.65rem;color:var(--muted);margin-top:4px">Ctrl+Enter または フォーカスを外すと自動保存。翌月になると自動アーカイブ。</div>
+      </div>
+      ${archives.length ? `
+      <div class="analysis-archive">
+        ${archives.map(a=>`
+        <div class="analysis-archive-item">
+          <div class="arc-month">${a.month}</div>
+          <div class="arc-text">${a.text.replace(/</g,'&lt;')}</div>
+        </div>`).join('')}
+      </div>` : ''}
+    </div>`;
+}
+
 function renderBiz(){
   const fi = D.filled_idx;
   const months = D.months;
@@ -1223,6 +1267,11 @@ function renderBiz(){
             <div class="card-title">💰 貢献利益 + 予測</div>
             <canvas id="chartBizOP${i}" height="200"></canvas>
           </div>
+        </div>
+
+        <!-- 差異分析 -->
+        <div class="card" style="margin-top:16px;padding:16px">
+          ${renderAnalysisSection(name, fi, months)}
         </div>
       </div>
     `;
