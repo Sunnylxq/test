@@ -91,6 +91,16 @@ body{font-family:'Hiragino Sans','Yu Gothic',system-ui,sans-serif;background:var
 .biz-tbl tr.metric-header td:first-child{background:var(--bg3)}
 .biz-tbl .neg{color:var(--red)!important}
 .biz-tbl .pos{color:var(--green)!important}
+.biz-tbl td.editable{cursor:pointer;transition:background .1s}
+.biz-tbl td.editable:hover{background:rgba(99,102,241,.12)!important;outline:1px solid rgba(99,102,241,.4)}
+.biz-tbl td.editing{padding:0!important}
+.biz-tbl td.editing input{width:100%;min-width:80px;background:rgba(99,102,241,.18);border:1.5px solid var(--accent);border-radius:4px;padding:5px 8px;color:var(--text);font-size:.76rem;text-align:right;outline:none}
+.biz-tbl tr.forecast td{color:#a78bfa}
+.forecast-section{margin-top:16px}
+.forecast-kpi-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:16px}
+.forecast-kpi{background:var(--bg3);border:1px solid rgba(99,102,241,.2);border-radius:8px;padding:12px;text-align:center}
+.forecast-kpi .val{font-size:1.1rem;font-weight:800;color:#a78bfa}
+.forecast-kpi .lbl{font-size:.7rem;color:var(--muted);margin-top:2px}
 
 /* ===== APP ===== */
 #app{display:none;flex-direction:column;min-height:100vh}
@@ -916,6 +926,24 @@ function renderPL(){
 // ===== BIZ PAGE =====
 let currentBizIdx = 0;
 let currentYear = 2026;
+// 編集データ保存: key = "bizEdit_名前_metric_月index"
+function getBizEdit(name,metric,mi){ try{ return JSON.parse(localStorage.getItem('bizEdit_'+name+'_'+metric+'_'+mi)); }catch(e){ return null; } }
+function setBizEdit(name,metric,mi,val){ localStorage.setItem('bizEdit_'+name+'_'+metric+'_'+mi, JSON.stringify(val)); }
+
+// 直近N月平均で予測
+function forecast(actual, fi, lookback){
+  const lb = lookback||3;
+  const slice = actual.slice(Math.max(0,fi+1-lb), fi+1).filter(v=>v!==0&&v!==null&&v!==undefined);
+  if(!slice.length) return 0;
+  return slice.reduce((a,v)=>a+v,0)/slice.length;
+}
+
+function getMergedActual(name, metric, original){
+  return original.map((v,mi)=>{
+    const edited = getBizEdit(name, metric, mi);
+    return edited !== null ? edited : v;
+  });
+}
 
 function onYearChange(year){
   currentYear = parseInt(year);
@@ -927,62 +955,99 @@ function renderBiz(){
   const months = D.months;
   const bizNames = D.businesses.map(b=>b.name);
 
-  // Build tabs
-  const tabsEl = document.getElementById('bizTabs');
-  tabsEl.innerHTML = bizNames.map((name,i)=>`
+  // タブ生成
+  document.getElementById('bizTabs').innerHTML = bizNames.map((name,i)=>`
     <div class="biz-tab${i===currentBizIdx?' active':''}" onclick="switchBizTab(${i})">${name}</div>
   `).join('');
 
-  // Build content sections
-  const contentEl = document.getElementById('bizContent');
-  contentEl.innerHTML = bizNames.map((name,i)=>{
+  // セクション生成
+  document.getElementById('bizContent').innerHTML = bizNames.map((name,i)=>{
     const detail = D.biz_detail[name] || {};
     const metrics = ['売上','原価','粗利','販管費','貢献利益'];
     const color = COLORS[i%COLORS.length];
 
-    // Build table rows
+    // テーブル行生成
     const tableRows = metrics.map(metric=>{
       const m = detail[metric];
       if(!m) return '';
-      const fmtCell = (v)=>{
-        if(v===0||v===undefined||v===null) return '<td style="color:var(--muted)">&#8212;</td>';
+      const merged = getMergedActual(name, metric, m.actual);
+      const fmtCell = (v, isActual, mi)=>{
+        const isEmpty = v===0||v===undefined||v===null;
         const cls = v<0?'neg':'';
-        return `<td class="${cls}">${Math.round(v).toLocaleString()}</td>`;
+        const editAttr = isActual && canEdit() ? `class="${cls} editable" onclick="startEdit(this,'${name}','${metric}',${mi})"` : `class="${cls}"`;
+        const display = isEmpty ? '<span style="color:var(--muted)">—</span>' : Math.round(v).toLocaleString();
+        return `<td ${editAttr} data-val="${v||0}">${display}</td>`;
       };
+      // 予測行: fi+1以降を直近3か月平均で埋める
+      const fcVal = forecast(merged, fi, 3);
+      const forecastCells = months.map((mo,mi)=>{
+        if(mi<=fi) return '<td style="color:var(--muted)">—</td>';
+        const v = fcVal;
+        return `<td style="color:#a78bfa">${Math.round(v).toLocaleString()}</td>`;
+      }).join('');
+
       return `
         <tr class="metric-header"><td colspan="13">${metric}</td></tr>
-        <tr class="actual"><td style="padding-left:16px">&nbsp;本年実績</td>${m.actual.map((v)=>fmtCell(v)).join('')}</tr>
-        <tr class="plan"><td style="padding-left:16px">&nbsp;計画</td>${m.plan.map((v)=>fmtCell(v)).join('')}</tr>
-        <tr class="prev"><td style="padding-left:16px">&nbsp;前年実績</td>${m.prev.map((v)=>fmtCell(v)).join('')}</tr>
+        <tr class="actual"><td style="padding-left:16px">&nbsp;本年実績</td>${merged.map((v,mi)=>fmtCell(v,true,mi)).join('')}</tr>
+        <tr class="plan"><td style="padding-left:16px">&nbsp;計画</td>${m.plan.map((v,mi)=>fmtCell(v,false,mi)).join('')}</tr>
+        <tr class="prev"><td style="padding-left:16px">&nbsp;前年実績</td>${(m.prev||[]).map((v,mi)=>fmtCell(v,false,mi)).join('')}</tr>
+        <tr class="forecast"><td style="padding-left:16px">&nbsp;🔮予測</td>${forecastCells}</tr>
       `;
     }).join('');
 
+    // 予測サマリー計算 (売上・貢献利益)
+    const salesM = detail['売上'];
+    const opM = detail['貢献利益'];
+    const mergedSales = salesM ? getMergedActual(name,'売上',salesM.actual) : [];
+    const mergedOP = opM ? getMergedActual(name,'貢献利益',opM.actual) : [];
+    const cumSalesActual = mergedSales.slice(0,fi+1).reduce((a,v)=>a+v,0);
+    const fcSales = forecast(mergedSales,fi,3);
+    const yearSalesFc = cumSalesActual + fcSales*(12-fi-1);
+    const cumOPActual = mergedOP.slice(0,fi+1).reduce((a,v)=>a+v,0);
+    const fcOP = forecast(mergedOP,fi,3);
+    const yearOPFc = cumOPActual + fcOP*(12-fi-1);
+    const fcMargin = yearSalesFc>0 ? yearOPFc/yearSalesFc*100 : 0;
+
     return `
       <div class="biz-section${i===currentBizIdx?' active':''}" id="bizSection${i}">
+        <!-- データテーブル -->
         <div class="card" style="overflow-x:auto;padding:0;margin-bottom:16px">
-          <div style="padding:14px 16px 8px;font-weight:700;font-size:.9rem;display:flex;align-items:center;gap:8px;border-bottom:1px solid var(--border)">
+          <div style="padding:12px 16px;font-weight:700;font-size:.88rem;display:flex;align-items:center;gap:8px;border-bottom:1px solid var(--border)">
             <div style="width:10px;height:10px;border-radius:2px;background:${color}"></div>
-            ${name} &#8212; 月次データ（単位：千円）
+            ${name} — 月次データ（千円）
+            ${canEdit()?'<span style="font-size:.68rem;color:var(--muted);margin-left:4px">✏️ 実績セルをクリックして編集</span>':''}
           </div>
           <div style="overflow-x:auto">
-            <table class="biz-tbl">
+            <table class="biz-tbl" id="bizTbl${i}">
               <thead>
                 <tr>
                   <th style="text-align:left">項目</th>
-                  ${months.map((m,mi)=>`<th style="${mi<=fi?'color:var(--text)':''}">${m}${mi<=fi?'&#9679;':''}</th>`).join('')}
+                  ${months.map((m,mi)=>`<th style="${mi<=fi?'color:var(--text);font-weight:700':''}">${m}${mi<=fi?'●':''}</th>`).join('')}
                 </tr>
               </thead>
               <tbody>${tableRows}</tbody>
             </table>
           </div>
         </div>
-        <div class="grid-2">
+
+        <!-- 予測サマリー -->
+        <div class="forecast-section">
+          <div style="font-size:.8rem;font-weight:700;color:#a78bfa;margin-bottom:10px">🔮 年間着地見込み（直近3ヶ月ペース）</div>
+          <div class="forecast-kpi-grid">
+            <div class="forecast-kpi"><div class="val">¥${Math.round(yearSalesFc/1000).toLocaleString()}M</div><div class="lbl">売上 年間予測</div></div>
+            <div class="forecast-kpi"><div class="val">¥${Math.round(yearOPFc/1000).toLocaleString()}M</div><div class="lbl">貢献利益 年間予測</div></div>
+            <div class="forecast-kpi"><div class="val">${fcMargin.toFixed(1)}%</div><div class="lbl">予測利益率</div></div>
+          </div>
+        </div>
+
+        <!-- チャート -->
+        <div class="grid-2" style="margin-top:16px">
           <div class="card">
-            <div class="card-title">&#128200; 売上推移</div>
+            <div class="card-title">📈 売上推移 + 予測</div>
             <canvas id="chartBizSales${i}" height="200"></canvas>
           </div>
           <div class="card">
-            <div class="card-title">&#128176; 貢献利益推移</div>
+            <div class="card-title">💰 貢献利益 + 予測</div>
             <canvas id="chartBizOP${i}" height="200"></canvas>
           </div>
         </div>
@@ -990,28 +1055,47 @@ function renderBiz(){
     `;
   }).join('');
 
-  // Render charts for active tab only
+  renderBizCharts(currentBizIdx);
+}
+
+function startEdit(td, name, metric, mi){
+  if(!canEdit()) return;
+  const cur = parseFloat(td.dataset.val)||0;
+  td.className = 'editing';
+  td.innerHTML = `<input type="number" value="${cur===0?'':cur}" placeholder="0" autofocus onblur="commitEdit(this,'${name}','${metric}',${mi})" onkeydown="if(event.key==='Enter')this.blur();if(event.key==='Escape'){this.blur();}">`;
+  td.querySelector('input').focus();
+}
+
+function commitEdit(input, name, metric, mi){
+  const val = parseFloat(input.value);
+  if(!isNaN(val)) setBizEdit(name, metric, mi, val);
+  renderBiz();
   renderBizCharts(currentBizIdx);
 }
 
 function renderBizCharts(idx){
-  const name = D.businesses[idx]&&D.businesses[idx].name;
-  if(!name) return;
+  const biz = D.businesses[idx];
+  if(!biz) return;
+  const name = biz.name;
   const detail = D.biz_detail[name];
   if(!detail) return;
   const fi = D.filled_idx;
   const months = D.months;
   const color = COLORS[idx%COLORS.length];
 
-  // Sales chart
+  // 売上チャート (実績 + 予測)
   const salesData = detail['売上'];
   if(salesData){
+    const merged = getMergedActual(name,'売上',salesData.actual);
+    const fcVal = forecast(merged,fi,3);
+    const fcLine = months.map((_,mi)=> mi<=fi ? null : fcVal);
     mkChart('chartBizSales'+idx,{
       type:'line',
       data:{
         labels:months,
         datasets:[
-          {label:'本年実績',data:salesData.actual,borderColor:color,backgroundColor:color+'22',tension:.3,borderWidth:2,pointRadius:3},
+          {label:'本年実績',data:merged,borderColor:color,backgroundColor:color+'22',tension:.3,borderWidth:2,pointRadius:3,spanGaps:false},
+          {label:'予測',data:fcLine,borderColor:'#a78bfa',borderDash:[5,3],tension:.3,borderWidth:2,pointRadius:3,spanGaps:false},
           {label:'計画',data:salesData.plan,borderColor:'#64748b',borderDash:[4,4],tension:.3,borderWidth:1.5,pointRadius:2},
           {label:'前年実績',data:salesData.prev,borderColor:'#374151',borderDash:[2,3],tension:.3,borderWidth:1,pointRadius:2},
         ]
@@ -1020,16 +1104,21 @@ function renderBizCharts(idx){
     });
   }
 
-  // Contribution margin chart
+  // 貢献利益チャート (実績 + 予測)
   const opData = detail['貢献利益'];
   if(opData){
+    const merged = getMergedActual(name,'貢献利益',opData.actual);
+    const fcVal = forecast(merged,fi,3);
+    const actualBars = months.map((_,mi)=> mi<=fi ? merged[mi] : null);
+    const fcBars = months.map((_,mi)=> mi>fi ? fcVal : null);
     mkChart('chartBizOP'+idx,{
       type:'bar',
       data:{
         labels:months,
         datasets:[
-          {label:'本年実績',data:opData.actual,backgroundColor:opData.actual.map(v=>v>=0?color+'bb':'#ef444499'),borderRadius:3},
-          {label:'計画',data:opData.plan,backgroundColor:'#64748b44',borderRadius:3},
+          {label:'本年実績',data:actualBars,backgroundColor:actualBars.map(v=>v===null?'transparent':v>=0?color+'bb':'#ef444499'),borderRadius:3},
+          {label:'予測',data:fcBars,backgroundColor:'rgba(167,139,250,.45)',borderRadius:3,borderDash:[4,4]},
+          {label:'計画',data:opData.plan,backgroundColor:'#64748b33',borderRadius:3},
         ]
       },
       options:{...CHART_OPTS}
@@ -1039,11 +1128,8 @@ function renderBizCharts(idx){
 
 function switchBizTab(idx){
   currentBizIdx = idx;
-  // Update tabs
   document.querySelectorAll('.biz-tab').forEach((t,i)=>t.classList.toggle('active',i===idx));
-  // Update sections
   document.querySelectorAll('.biz-section').forEach((s,i)=>s.classList.toggle('active',i===idx));
-  // Render charts for this tab (lazy)
   renderBizCharts(idx);
 }
 
