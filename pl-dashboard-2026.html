@@ -833,6 +833,7 @@ function renderDashboard(){
   mkChart('chartOP',{type:'bar',data:{labels:months,datasets:[
     {label:'実績',data:D.op.actual.slice(0,fi+1),backgroundColor:'rgba(16,185,129,.7)',borderRadius:4},
     {label:'計画',data:D.op.plan.slice(0,fi+1),backgroundColor:'rgba(148,163,184,.2)',borderRadius:4},
+    {label:'前年',data:D.op.prev.slice(0,fi+1),backgroundColor:'rgba(99,102,241,.3)',borderRadius:4},
   ]},options:CHART_OPTS});
 
   // 利益率チャート
