@@ -836,50 +836,56 @@ function renderDashboard(){
   document.getElementById('kpiGridSales').innerHTML  = salesKpis.map(mkCard).join('');
   document.getElementById('kpiGridProfit').innerHTML = profitKpis.map(mkCard).join('');
 
-  // アラート（詳細版）
-  const alerts = [];
+  // アラート（3テーマ統合版）
   const latestMargin = D.margin_actual[fi] * 100;
   const latestSalesActual = D.sales.actual[fi];
-  const latestSalesPlan   = D.sales.plan[fi];
   const latestMoM = fi > 0 ? (D.sales.actual[fi] - D.sales.actual[fi-1]) / Math.abs(D.sales.actual[fi-1] || 1) * 100 : 0;
-  const latestOPMoM = fi > 0 ? (D.op.actual[fi] - D.op.actual[fi-1]) / Math.abs(D.op.actual[fi-1] || 1) * 100 : 0;
-
-  // 売上系
-  if(achieveRate >= 120) alerts.push({type:'green',icon:'🚀',title:`売上が計画を大幅超過（${pct(achieveRate)}）`,desc:`累計実績 ${fmtM(cumSales)} / 累計計画 ${fmtM(cumPlanSales)}。前年比でも +${yoy.toFixed(1)}% と力強い成長。`});
-  else if(achieveRate >= 100) alerts.push({type:'green',icon:'🟢',title:`売上計画達成中（${pct(achieveRate)}）`,desc:`累計実績 ${fmtM(cumSales)} / 累計計画 ${fmtM(cumPlanSales)}。前年同期比 +${yoy.toFixed(1)}%。`});
-  else if(achieveRate >= 90) alerts.push({type:'yellow',icon:'🟡',title:`売上がやや計画未達（${pct(achieveRate)}）`,desc:`累計実績 ${fmtM(cumSales)} / 累計計画 ${fmtM(cumPlanSales)}。差額 ${fmtM(cumSales-cumPlanSales)}（${(achieveRate-100).toFixed(1)}pt）。挽回の余地あり。`});
-  else alerts.push({type:'red',icon:'🔴',title:`売上が計画を大幅に下回っています（${pct(achieveRate)}）`,desc:`累計実績 ${fmtM(cumSales)} / 累計計画 ${fmtM(cumPlanSales)}。差額 ${fmtM(cumSales-cumPlanSales)}。要因分析と早急な対策が必要。`});
-
-  // 年間進捗 vs 時間
-  if(salesProgress < timeElapsedPct - 5) alerts.push({type:'yellow',icon:'⚠️',title:`年間ペース未達 — 売上進捗率 ${pct(salesProgress)}（時間経過 ${pct(timeElapsedPct)}）`,desc:`年間計画 ${fmtM(annualSalesPlan)} に対し累計実績 ${fmtM(cumSales)}。現ペースの着地は年間計画の約 ${pct(salesProgress*12/(fi+1))}。`});
-  else if(salesProgress > timeElapsedPct + 5) alerts.push({type:'green',icon:'✅',title:`年間ペース超過 — 売上進捗率 ${pct(salesProgress)}（時間経過 ${pct(timeElapsedPct)}）`,desc:`現ペースを維持すれば年間計画の約 ${pct(salesProgress*12/(fi+1))} に着地する見込み。`});
-
-  // 利益系
-  if(opAchieve >= 120) alerts.push({type:'green',icon:'💰',title:`営業利益が計画を大幅超過（${pct(opAchieve)}）`,desc:`累計利益 ${fmtM(cumOP)} / 計画 ${fmtM(cumPlanOP)}。利益率 ${pct(cumMargin)}（前年同期比 ${marginVsPrev>=0?'+':''}${marginVsPrev.toFixed(1)}pt）。`});
-  else if(opAchieve < 90) alerts.push({type:'red',icon:'🔴',title:`営業利益が計画未達（${pct(opAchieve)}）`,desc:`累計利益 ${fmtM(cumOP)} / 計画 ${fmtM(cumPlanOP)}。利益率 ${pct(cumMargin)}（前年同期比 ${marginVsPrev>=0?'+':''}${marginVsPrev.toFixed(1)}pt）。費用構造の見直しを検討。`});
-
-  // 利益率トレンド
   const margins = D.margin_actual.slice(0,fi+1).filter(v=>v>0);
   let dec=0; for(let j=1;j<margins.length;j++){if(margins[j]<margins[j-1])dec++;else dec=0;}
-  if(dec>=2) alerts.push({type:'yellow',icon:'📉',title:`利益率が${dec+1}ヶ月連続低下（現在 ${pct(latestMargin)}）`,desc:`${D.months[fi-dec]}〜${D.months[fi]} の推移：${margins.slice(-dec-1).map(v=>pct(v*100)).join(' → ')}。費用増や単価下落の可能性あり。`});
-  else if(margins.length>=2 && margins[margins.length-1] > margins[0]) alerts.push({type:'green',icon:'📈',title:`利益率が改善傾向（${pct(margins[0]*100)} → ${pct(latestMargin)}）`,desc:`期初から${fi+1}ヶ月で +${((margins[margins.length-1]-margins[0])*100).toFixed(1)}pt 改善。`});
 
-  // 前年比コメント
-  if(yoy > 100) alerts.push({type:'green',icon:'🚀',title:`前年同期比 +${yoy.toFixed(1)}% と倍増ペース`,desc:`前年 ${fmtM(cumPrevSales)} → 今年 ${fmtM(cumSales)}（+${fmtM(cumSales-cumPrevSales)}）。`});
-  else if(yoy < -10) alerts.push({type:'red',icon:'🔻',title:`前年同期比 ${yoy.toFixed(1)}% と前年割れ`,desc:`前年 ${fmtM(cumPrevSales)} → 今年 ${fmtM(cumSales)}（${fmtM(cumSales-cumPrevSales)}）。市場・商品・チャネルの変化を確認。`});
+  // 売上：達成率 + 進捗 + 前年比 を1行に
+  const salesType = achieveRate >= 100 ? 'green' : achieveRate >= 90 ? 'yellow' : 'red';
+  const salesIcon = achieveRate >= 120 ? '🚀' : achieveRate >= 100 ? '🟢' : achieveRate >= 90 ? '🟡' : '🔴';
+  const progNote = salesProgress >= timeElapsedPct + 5 ? `年間進捗 ${pct(salesProgress)} でペース超過（着地見込 ${pct(salesProgress*12/(fi+1))}）。`
+                 : salesProgress < timeElapsedPct - 5  ? `年間進捗 ${pct(salesProgress)} でペース未達（着地見込 ${pct(salesProgress*12/(fi+1))}）。`
+                 : `年間進捗 ${pct(salesProgress)}（時間経過 ${pct(timeElapsedPct)} 並走中）。`;
+  const yoyNote = yoy > 0 ? `前年比 +${yoy.toFixed(1)}%（前年 ${fmtM(cumPrevSales)} → 今年 ${fmtM(cumSales)}）。` : `前年比 ${yoy.toFixed(1)}%（前年 ${fmtM(cumPrevSales)} → 今年 ${fmtM(cumSales)}）。`;
+  const salesTitle = achieveRate >= 120 ? `売上 大幅超過 ${pct(achieveRate)}` : achieveRate >= 100 ? `売上 計画達成 ${pct(achieveRate)}` : achieveRate >= 90 ? `売上 やや未達 ${pct(achieveRate)}` : `売上 計画大幅未達 ${pct(achieveRate)}`;
+  const salesDesc = `累計実績 ${fmtM(cumSales)} / 累計計画 ${fmtM(cumPlanSales)}（差 ${fmtM(cumSales-cumPlanSales)}）。${progNote}${yoyNote}`;
 
-  // 直近月モメンタム
-  if(latestMoM > 15) alerts.push({type:'green',icon:'⚡',title:`${D.months[fi]} 売上が前月比 +${latestMoM.toFixed(1)}% と加速`,desc:`${D.months[fi-1]??'前月'} ${fmtM(D.sales.actual[fi-1]||0)} → ${D.months[fi]} ${fmtM(latestSalesActual)}。モメンタム維持が重要。`});
-  else if(latestMoM < -15 && fi>0) alerts.push({type:'yellow',icon:'🐢',title:`${D.months[fi]} 売上が前月比 ${latestMoM.toFixed(1)}% と減速`,desc:`${D.months[fi-1]??'前月'} ${fmtM(D.sales.actual[fi-1]||0)} → ${D.months[fi]} ${fmtM(latestSalesActual)}。季節要因か構造的な要因かを確認。`});
+  // 利益：達成率 + 利益率トレンド を1行に
+  const opType = opAchieve >= 100 ? 'green' : opAchieve >= 90 ? 'yellow' : 'red';
+  const opIcon = opAchieve >= 120 ? '💰' : opAchieve >= 100 ? '🟢' : '🟡';
+  const marginTrend = dec >= 2 ? `利益率は${dec+1}ヶ月連続低下中（${margins.slice(-dec-1).map(v=>pct(v*100)).join('→')}）。要注意。`
+                    : margins.length >= 2 && margins[margins.length-1] > margins[0] ? `利益率は改善傾向（${pct(margins[0]*100)}→${pct(latestMargin)}、+${((margins[margins.length-1]-margins[0])*100).toFixed(1)}pt）。`
+                    : `利益率は横ばい（現在 ${pct(latestMargin)}）。`;
+  const opTitle = opAchieve >= 120 ? `利益 大幅超過 ${pct(opAchieve)}` : opAchieve >= 100 ? `利益 計画達成 ${pct(opAchieve)}` : `利益 計画未達 ${pct(opAchieve)}`;
+  const opDesc = `累計利益 ${fmtM(cumOP)} / 計画 ${fmtM(cumPlanOP)}（差 ${fmtM(cumOP-cumPlanOP)}）。利益率 ${pct(cumMargin)}（前年同期 ${pct(prevMargin)}、${marginVsPrev>=0?'+':''}${marginVsPrev.toFixed(1)}pt）。${marginTrend}`;
+
+  // モメンタム：直近月の動き
+  const momType = latestMoM > 15 ? 'green' : latestMoM < -15 ? 'yellow' : 'green';
+  const momIcon = latestMoM > 15 ? '⚡' : latestMoM < -15 ? '🐢' : '📊';
+  const momTitle = latestMoM > 15 ? `${D.months[fi]} 売上 前月比 +${latestMoM.toFixed(1)}% 加速`
+                 : latestMoM < -15 && fi > 0 ? `${D.months[fi]} 売上 前月比 ${latestMoM.toFixed(1)}% 減速`
+                 : `${D.months[fi]} 売上 前月比 ${latestMoM>=0?'+':''}${latestMoM.toFixed(1)}%`;
+  const momDesc = fi > 0
+    ? `${D.months[fi-1]} ${fmtM(D.sales.actual[fi-1]||0)} → ${D.months[fi]} ${fmtM(latestSalesActual)}。利益は前月比 ${latestMoM>=0?'+':''}${(()=>{const a=D.op.actual[fi];const b=D.op.actual[fi-1]||1;return((a-b)/Math.abs(b)*100).toFixed(1)})()}%。`
+    : `${D.months[fi]} 売上 ${fmtM(latestSalesActual)}。`;
+
+  const alerts = [
+    {type:salesType, icon:salesIcon, title:salesTitle, desc:salesDesc},
+    {type:opType,    icon:opIcon,    title:opTitle,    desc:opDesc},
+    {type:momType,   icon:momIcon,   title:momTitle,   desc:momDesc},
+  ];
 
   const aEl = document.getElementById('alertSection');
-  aEl.innerHTML = alerts.length ? `
+  aEl.innerHTML = `
     <div style="font-size:.72rem;font-weight:700;color:var(--muted);letter-spacing:.06em;margin-bottom:8px">── 分析・アラート</div>
     ${alerts.map(a=>`
     <div class="alert-box alert-${a.type}">
       <span class="alert-icon">${a.icon}</span>
       <div><div class="alert-title">${a.title}</div><div class="alert-desc">${a.desc}</div></div>
-    </div>`).join('')}` : '';
+    </div>`).join('')}`;
 
   // 売上チャート
   mkChart('chartSales',{type:'line',data:{labels:months,datasets:[
