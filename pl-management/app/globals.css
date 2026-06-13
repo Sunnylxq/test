@@ -1,0 +1,55 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --bg: #0f1117;
+  --bg2: #1a1d2e;
+  --bg3: #242840;
+  --card: #1e2235;
+  --border: #2e3250;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  background: var(--bg);
+  color: #e2e8f0;
+  font-family: 'Inter', 'Hiragino Sans', 'Yu Gothic', system-ui, sans-serif;
+}
+
+/* scrollbar */
+::-webkit-scrollbar { width: 5px; height: 5px; }
+::-webkit-scrollbar-track { background: var(--bg2); }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: #3e4270; }
+
+/* number input */
+input[type='number']::-webkit-inner-spin-button,
+input[type='number']::-webkit-outer-spin-button { -webkit-appearance: none; }
+input[type='number'] { -moz-appearance: textfield; }
+
+@layer components {
+  .card {
+    @apply bg-card border border-border rounded-card p-5;
+  }
+  .card-hover {
+    @apply card transition-all duration-150 hover:-translate-y-0.5 hover:shadow-card;
+  }
+  .badge-green  { @apply inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-success/15 text-success; }
+  .badge-red    { @apply inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-danger/15 text-danger; }
+  .badge-yellow { @apply inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-warning/15 text-warning; }
+  .badge-blue   { @apply inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-info/15 text-info; }
+  .badge-purple { @apply inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-accent/15 text-accent; }
+  .btn-primary  { @apply inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-accent text-white text-sm font-semibold hover:bg-accent-2 transition-colors; }
+  .btn-outline  { @apply inline-flex items-center gap-1.5 px-4 py-2 rounded-lg border border-border text-subtle text-sm font-semibold hover:bg-bg3 hover:text-white transition-colors; }
+  .btn-ghost    { @apply inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-subtle text-sm font-medium hover:bg-bg3 hover:text-white transition-colors; }
+  .input-field  {
+    @apply w-full bg-bg3 border border-border rounded-lg px-3 py-2 text-sm text-white placeholder-muted
+           focus:outline-none focus:border-accent focus:ring-2 focus:ring-accent/20 transition-colors;
+  }
+  .section-title { @apply text-sm font-bold text-white flex items-center gap-2; }
+  .page-header   { @apply flex items-start justify-between mb-7; }
+  .page-title    { @apply text-2xl font-bold text-white; }
+  .page-subtitle { @apply text-sm text-muted mt-1; }
+}
