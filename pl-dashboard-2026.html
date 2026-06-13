@@ -363,11 +363,21 @@ body{font-family:'UD デジタル 教科書体 NK','UDDigitalKyokasho-NK','Hirag
         </div>
       </div>
 
-      <!-- 達成率 -->
-      <div class="card">
-        <div class="card-title" style="margin-bottom:2px">🎯 事業別 年間計画進捗率（累計実績 ÷ 年間計画）</div>
-        <div style="font-size:.72rem;color:var(--muted);margin-bottom:14px">各事業の累計実績が年間計画に対して何%消化しているか。破線は経過時間の目安</div>
-        <canvas id="bizProgressChart" height="320"></canvas>
+      <!-- 達成率 3分割 -->
+      <div style="font-size:.72rem;color:var(--muted);margin-bottom:8px">各事業の累計実績が年間計画に対して何%消化しているか。黄色破線は経過時間の目安</div>
+      <div class="grid-3" style="gap:12px">
+        <div class="card">
+          <div class="card-title" style="color:#6366f1">💹 売上 進捗率</div>
+          <canvas id="bizProgressSales" height="280"></canvas>
+        </div>
+        <div class="card">
+          <div class="card-title" style="color:#fb923c">📦 販管費 進捗率</div>
+          <canvas id="bizProgressSG" height="280"></canvas>
+        </div>
+        <div class="card">
+          <div class="card-title" style="color:#10b981">💰 貢献利益 進捗率</div>
+          <canvas id="bizProgressOP" height="280"></canvas>
+        </div>
       </div>
     </div>
 
@@ -916,37 +926,36 @@ function renderDashboard(){
     progressSG.push(getRate('販管費'));
     progressOP.push(getRate('貢献利益'));
   });
-  mkChart('bizProgressChart', {
-    type: 'bar',
-    data: {
-      labels: bizNames,
-      datasets: [
-        { label: '売上', data: progressSales, backgroundColor: 'rgba(99,102,241,.75)', borderRadius: 3 },
-        { label: '販管費', data: progressSG, backgroundColor: 'rgba(251,146,60,.75)', borderRadius: 3 },
-        { label: '貢献利益', data: progressOP, backgroundColor: 'rgba(16,185,129,.75)', borderRadius: 3 },
-        // 経過時間ライン（scatter で点線代わり）
-        { label: `経過時間 ${timeElapsed.toFixed(0)}%`, data: bizNames.map(() => timeElapsed),
-          type: 'line', borderColor: 'rgba(250,204,21,.8)', borderDash: [5, 4], borderWidth: 1.5,
-          pointRadius: 0, fill: false, tension: 0, order: -1 },
-      ]
-    },
-    options: {
-      indexAxis: 'y',
-      responsive: true,
-      plugins: {
-        legend: { position: 'top', labels: { color: '#94a3b8', font: { size: 11 }, boxWidth: 12 } },
-        tooltip: { callbacks: { label: ctx => ctx.dataset.type === 'line' ? `${ctx.dataset.label}` : `${ctx.dataset.label}: ${ctx.raw}%` } },
+  const mkProgressChart = (canvasId, data, color, label) => {
+    const maxVal = Math.max(120, ...data) + 5;
+    mkChart(canvasId, {
+      type: 'bar',
+      data: {
+        labels: bizNames,
+        datasets: [
+          { label: label, data, backgroundColor: data.map(v => v >= timeElapsed ? color.replace(')', ',.85)').replace('rgb','rgba') : color.replace(')', ',.45)').replace('rgb','rgba')), borderRadius: 3 },
+          { label: `経過時間 ${timeElapsed.toFixed(0)}%`, data: bizNames.map(() => timeElapsed),
+            type: 'line', borderColor: 'rgba(250,204,21,.8)', borderDash: [5, 4], borderWidth: 1.5,
+            pointRadius: 0, fill: false, tension: 0, order: -1 },
+        ]
       },
-      scales: {
-        x: {
-          min: 0, max: Math.max(120, ...progressSales, ...progressSG, ...progressOP) + 5,
-          ticks: { color: '#64748b', font: { size: 10 }, callback: v => v + '%' },
-          grid: { color: 'rgba(255,255,255,.05)' }
+      options: {
+        indexAxis: 'y',
+        responsive: true,
+        plugins: {
+          legend: { display: false },
+          tooltip: { callbacks: { label: ctx => ctx.dataset.type === 'line' ? `経過時間 ${timeElapsed.toFixed(0)}%` : `${ctx.raw}%` } },
         },
-        y: { ticks: { color: '#94a3b8', font: { size: 10 } }, grid: { display: false } }
+        scales: {
+          x: { min: 0, max: maxVal, ticks: { color: '#64748b', font: { size: 9 }, callback: v => v + '%' }, grid: { color: 'rgba(255,255,255,.05)' } },
+          y: { ticks: { color: '#94a3b8', font: { size: 9 } }, grid: { display: false } }
+        }
       }
-    }
-  });
+    });
+  };
+  mkProgressChart('bizProgressSales', progressSales, 'rgb(99,102,241)', '売上');
+  mkProgressChart('bizProgressSG',    progressSG,    'rgb(251,146,60)',  '販管費');
+  mkProgressChart('bizProgressOP',    progressOP,    'rgb(16,185,129)', '貢献利益');
 }
 
 // ===== PL TABLE =====
