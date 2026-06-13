@@ -100,6 +100,7 @@ body{font-family:'UD デジタル 教科書体 NK','UDDigitalKyokasho-NK','Hirag
 .biz-tbl td.editing{padding:0!important}
 .biz-tbl td.editing input{width:100%;min-width:60px;background:rgba(99,102,241,.18);border:1.5px solid var(--accent);border-radius:4px;padding:2px 4px;color:var(--text);font-size:.68rem;text-align:right;outline:none}
 .biz-tbl tr.forecast td{color:#a78bfa}
+.biz-tbl td.fc-manual{outline:1px dashed #fbbf2488}
 .forecast-section{margin-top:16px}
 .forecast-kpi-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:16px}
 .forecast-kpi{background:var(--bg3);border:1px solid rgba(99,102,241,.2);border-radius:8px;padding:12px;text-align:center}
@@ -1014,12 +1015,45 @@ let currentYear = 2026;
 function getBizEdit(name,metric,mi){ try{ return JSON.parse(localStorage.getItem('bizEdit_'+name+'_'+metric+'_'+mi)); }catch(e){ return null; } }
 function setBizEdit(name,metric,mi,val){ localStorage.setItem('bizEdit_'+name+'_'+metric+'_'+mi, JSON.stringify(val)); }
 
-// 直近N月平均で予測
-function forecast(actual, fi, lookback){
-  const lb = lookback||3;
-  const slice = actual.slice(Math.max(0,fi+1-lb), fi+1).filter(v=>v!==0&&v!==null&&v!==undefined);
-  if(!slice.length) return 0;
-  return slice.reduce((a,v)=>a+v,0)/slice.length;
+// 予測: 当年全実績 + 前年データを組み合わせて月別に推算
+// - 当年実績がある月は前年比トレンドを計算し、前年同月に掛けて予測
+// - 前年データがない場合は当年全実績の平均
+function forecast(actual, fi, _unused, prev){
+  const actuals = actual.slice(0, fi+1).filter(v => v!==0 && v!==null && v!==undefined);
+  if(!actuals.length) return 0;
+  const avgActual = actuals.reduce((a,v)=>a+v,0) / actuals.length;
+  if(!prev || !prev.length) return avgActual;
+  // 前年比 (当年実績 / 前年同月) の平均で成長率を計算
+  const yoyRatios = [];
+  for(let i=0; i<=fi; i++){
+    const a = actual[i], p = prev[i];
+    if(a && p && p!==0) yoyRatios.push(a/p);
+  }
+  if(!yoyRatios.length) return avgActual;
+  const avgYoy = yoyRatios.reduce((a,v)=>a+v,0) / yoyRatios.length;
+  return avgYoy; // caller multiplies by prev[mi]
+}
+
+// 月別予測値を返す（手入力 > 前年×成長率 > 当年平均）
+function forecastMonthly(name, metric, merged, fi, prev){
+  const actuals = merged.slice(0, fi+1).filter(v => v!==0 && v!==null);
+  const avgActual = actuals.length ? actuals.reduce((a,v)=>a+v,0)/actuals.length : 0;
+  const yoyRatios = [];
+  for(let i=0; i<=fi; i++){
+    const a = merged[i], p = prev && prev[i];
+    if(a && p && p!==0) yoyRatios.push(a/p);
+  }
+  const avgYoy = yoyRatios.length ? yoyRatios.reduce((a,v)=>a+v,0)/yoyRatios.length : null;
+  return Array.from({length:12}, (_,mi)=>{
+    if(mi <= fi) return merged[mi];
+    // 手入力があれば優先
+    const edited = getBizEdit(name, metric, mi);
+    if(edited !== null && edited !== 0) return edited;
+    // 前年×成長率
+    if(avgYoy !== null && prev && prev[mi]) return prev[mi] * avgYoy;
+    // 当年平均
+    return avgActual;
+  });
 }
 
 function getMergedActual(name, metric, original){
@@ -1070,12 +1104,19 @@ function renderBiz(){
         else display=Math.round(v).toLocaleString();
         return `<td ${editAttr} data-val="${v||0}">${display}</td>`;
       };
-      // 予測行: fi+1以降を直近3か月平均で埋める
-      const fcVal = forecast(merged, fi, 3);
+      // 月別着地見込み（手入力 or 前年×成長率 or 当年平均）
+      const fcMonthly = forecastMonthly(name, metric, merged, fi, m.prev);
+      const fcVal = fcMonthly.slice(fi+1).filter(v=>v).reduce((a,v)=>a+v,0) / (12-fi-1||1);
       const forecastCells = months.map((mo,mi)=>{
         if(mi<=fi) return '<td style="color:var(--muted)">—</td>';
-        const v = fcVal;
-        return `<td style="color:#a78bfa">${Math.round(v).toLocaleString()}</td>`;
+        const v = fcMonthly[mi];
+        const hasManual = (()=>{ const e=getBizEdit(name,metric,mi); return e!==null&&e!==0; })();
+        const editAttr = canEdit() ? `class="editable${hasManual?' fc-manual':''}" onclick="startEdit(this,'${name}','${metric}',${mi})"` : '';
+        let display;
+        if(metric==='CVR') display=(v*100).toFixed(2)+'%';
+        else if(metric==='客単価') display=v.toFixed(1)+'元';
+        else display=Math.round(v).toLocaleString();
+        return `<td ${editAttr} data-val="${v||0}" style="color:${hasManual?'#fbbf24':'#a78bfa'}">${display}</td>`;
       }).join('');
 
       // 累計・合計・着地見込み計算
@@ -1104,11 +1145,10 @@ function renderBiz(){
       const annualPrev = isRatio
         ? ((m.prev||[]).filter(v=>v>0).reduce((a,v)=>a+v,0) / ((m.prev||[]).filter(v=>v>0).length||1))
         : (m.prev||[]).reduce((a,v)=>a+v,0);
-      // 着地見込み（本年実績のみ）
-      const remainMonths = 12 - fi - 1;
+      // 着地見込み = 累計実績 + 月別予測の合計（fcMonthlyは実績月も含む全12ヶ月）
       const landingActual = isRatio
-        ? (()=>{ const all=[...merged.slice(0,fi+1),...Array(remainMonths).fill(fcVal)]; return all.filter(v=>v>0).reduce((a,v)=>a+v,0)/(all.filter(v=>v>0).length||1); })()
-        : cumActual + fcVal * remainMonths;
+        ? (fcMonthly.filter(v=>v>0).reduce((a,v)=>a+v,0) / (fcMonthly.filter(v=>v>0).length||1))
+        : fcMonthly.reduce((a,v)=>a+v,0);
       // 計画比・前年比（月別）
       const planRatioCells  = months.map((mo,mi)=>fmtRatio(merged[mi], m.plan[mi], mi)).join('');
       const prevRatioCells  = months.map((mo,mi)=>fmtRatio(merged[mi], (m.prev||[])[mi], mi)).join('');
@@ -1133,12 +1173,10 @@ function renderBiz(){
     const opM = detail['貢献利益'];
     const mergedSales = salesM ? getMergedActual(name,'売上',salesM.actual) : [];
     const mergedOP = opM ? getMergedActual(name,'貢献利益',opM.actual) : [];
-    const cumSalesActual = mergedSales.slice(0,fi+1).reduce((a,v)=>a+v,0);
-    const fcSales = forecast(mergedSales,fi,3);
-    const yearSalesFc = cumSalesActual + fcSales*(12-fi-1);
-    const cumOPActual = mergedOP.slice(0,fi+1).reduce((a,v)=>a+v,0);
-    const fcOP = forecast(mergedOP,fi,3);
-    const yearOPFc = cumOPActual + fcOP*(12-fi-1);
+    const fcSalesMonthly = salesM ? forecastMonthly(name,'売上',mergedSales,fi,salesM.prev) : Array(12).fill(0);
+    const yearSalesFc = fcSalesMonthly.reduce((a,v)=>a+v,0);
+    const fcOPMonthly = opM ? forecastMonthly(name,'貢献利益',mergedOP,fi,opM.prev) : Array(12).fill(0);
+    const yearOPFc = fcOPMonthly.reduce((a,v)=>a+v,0);
     const fcMargin = yearSalesFc>0 ? yearOPFc/yearSalesFc*100 : 0;
 
     return `
