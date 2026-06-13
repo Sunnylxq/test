@@ -67,6 +67,30 @@ body{font-family:'Hiragino Sans','Yu Gothic',system-ui,sans-serif;background:var
 .permission-note ul{margin-left:16px;color:var(--subtle);margin-top:4px}
 .permission-note li{margin-top:3px}
 .no-perm-banner{background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.3);color:var(--red);border-radius:8px;padding:10px 14px;font-size:.82rem;margin-bottom:16px;display:none}
+/* ===== YEAR SELECT ===== */
+.year-select{background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:5px 10px;color:var(--text);font-size:.82rem;font-weight:700;outline:none;cursor:pointer}
+.year-select:focus{border-color:var(--accent)}
+/* ===== BIZ SUB TABS ===== */
+.biz-tabs{display:flex;gap:0;overflow-x:auto;border-bottom:1px solid var(--border);margin-bottom:16px;padding-bottom:0;scrollbar-width:none}
+.biz-tabs::-webkit-scrollbar{display:none}
+.biz-tab{padding:8px 14px;font-size:.78rem;font-weight:600;color:var(--muted);cursor:pointer;border-bottom:2px solid transparent;white-space:nowrap;transition:all .15s;flex-shrink:0}
+.biz-tab:hover{color:var(--text)}
+.biz-tab.active{color:var(--accent);border-bottom-color:var(--accent)}
+.biz-section{display:none}
+.biz-section.active{display:block}
+/* ===== BIZ DATA TABLE ===== */
+.biz-tbl{width:100%;border-collapse:collapse;font-size:.76rem;margin-bottom:0}
+.biz-tbl th{padding:7px 10px;text-align:right;color:var(--muted);font-weight:600;border-bottom:1px solid var(--border);background:var(--bg3);white-space:nowrap}
+.biz-tbl th:first-child{text-align:left;min-width:90px;position:sticky;left:0;background:var(--bg3);z-index:1}
+.biz-tbl td{padding:6px 10px;text-align:right;border-bottom:1px solid rgba(46,50,80,.4);white-space:nowrap}
+.biz-tbl td:first-child{text-align:left;position:sticky;left:0;background:var(--card);z-index:1}
+.biz-tbl tr.actual td{color:var(--text)}
+.biz-tbl tr.plan td{color:var(--muted)}
+.biz-tbl tr.prev td{color:var(--muted);font-style:italic}
+.biz-tbl tr.metric-header td{background:var(--bg3);font-weight:700;color:var(--subtle);font-size:.72rem;border-top:2px solid var(--border)}
+.biz-tbl tr.metric-header td:first-child{background:var(--bg3)}
+.biz-tbl .neg{color:var(--red)!important}
+.biz-tbl .pos{color:var(--green)!important}
 
 /* ===== APP ===== */
 #app{display:none;flex-direction:column;min-height:100vh}
@@ -229,6 +253,9 @@ body{font-family:'Hiragino Sans','Yu Gothic',system-ui,sans-serif;background:var
     <div class="header-title" id="headerTitle"></div>
     <div class="header-spacer"></div>
     <div class="header-updated" id="headerDate"></div>
+    <select class="year-select" id="yearSelect" onchange="onYearChange(this.value)">
+      <option value="2026">2026年</option>
+    </select>
     <div class="user-badge" onclick="toggleUserMenu()">
       <div class="user-avatar" id="userAvatar">A</div>
       <span class="user-name" id="userName">管理者</span>
@@ -345,9 +372,10 @@ body{font-family:'Hiragino Sans','Yu Gothic',system-ui,sans-serif;background:var
       <div class="page-header">
         <div>
           <div class="page-title">🏢 事業別分析</div>
-          <div class="page-sub">各事業の売上推移</div>
+          <div class="page-sub" id="bizSub">各事業の売上推移</div>
         </div>
       </div>
+      <div class="biz-tabs" id="bizTabs"></div>
       <div id="bizContent"></div>
     </div>
 
@@ -572,6 +600,7 @@ function showPage(id, tab){
   document.getElementById('page-'+id).classList.add('active');
   if(tab) tab.classList.add('active');
   if(id === 'users') renderUserPage();
+  if(id === 'biz'){ currentBizIdx = 0; renderBiz(); }
   // ViewerへのPL詳細閲覧制限バナー
   const viewerBanner = document.getElementById('viewerReadonlyBanner');
   if(viewerBanner) viewerBanner.style.display = (id==='pl' && !canEdit()) ? 'block' : 'none';
@@ -885,28 +914,137 @@ function renderPL(){
 }
 
 // ===== BIZ PAGE =====
+let currentBizIdx = 0;
+let currentYear = 2026;
+
+function onYearChange(year){
+  currentYear = parseInt(year);
+  renderAll();
+}
+
 function renderBiz(){
   const fi = D.filled_idx;
-  const months = D.months.slice(0,fi+1);
-  const el = document.getElementById('bizContent');
+  const months = D.months;
+  const bizNames = D.businesses.map(b=>b.name);
 
-  el.innerHTML = D.businesses.map((b,i)=>`
-    <div class="card" style="margin-bottom:14px">
-      <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px">
-        <div style="width:12px;height:12px;border-radius:3px;background:${COLORS[i%COLORS.length]}"></div>
-        <div style="font-weight:700">${b.name}</div>
-        <div style="margin-left:auto;font-size:.78rem;color:var(--subtle)">
-          累計: <strong style="color:${COLORS[i%COLORS.length]}">${fmtM(b.monthly.slice(0,fi+1).reduce((a,v)=>a+v,0))}</strong>
+  // Build tabs
+  const tabsEl = document.getElementById('bizTabs');
+  tabsEl.innerHTML = bizNames.map((name,i)=>`
+    <div class="biz-tab${i===currentBizIdx?' active':''}" onclick="switchBizTab(${i})">${name}</div>
+  `).join('');
+
+  // Build content sections
+  const contentEl = document.getElementById('bizContent');
+  contentEl.innerHTML = bizNames.map((name,i)=>{
+    const detail = D.biz_detail[name] || {};
+    const metrics = ['売上','原価','粗利','販管費','貢献利益'];
+    const color = COLORS[i%COLORS.length];
+
+    // Build table rows
+    const tableRows = metrics.map(metric=>{
+      const m = detail[metric];
+      if(!m) return '';
+      const fmtCell = (v)=>{
+        if(v===0||v===undefined||v===null) return '<td style="color:var(--muted)">&#8212;</td>';
+        const cls = v<0?'neg':'';
+        return `<td class="${cls}">${Math.round(v).toLocaleString()}</td>`;
+      };
+      return `
+        <tr class="metric-header"><td colspan="13">${metric}</td></tr>
+        <tr class="actual"><td style="padding-left:16px">&nbsp;本年実績</td>${m.actual.map((v)=>fmtCell(v)).join('')}</tr>
+        <tr class="plan"><td style="padding-left:16px">&nbsp;計画</td>${m.plan.map((v)=>fmtCell(v)).join('')}</tr>
+        <tr class="prev"><td style="padding-left:16px">&nbsp;前年実績</td>${m.prev.map((v)=>fmtCell(v)).join('')}</tr>
+      `;
+    }).join('');
+
+    return `
+      <div class="biz-section${i===currentBizIdx?' active':''}" id="bizSection${i}">
+        <div class="card" style="overflow-x:auto;padding:0;margin-bottom:16px">
+          <div style="padding:14px 16px 8px;font-weight:700;font-size:.9rem;display:flex;align-items:center;gap:8px;border-bottom:1px solid var(--border)">
+            <div style="width:10px;height:10px;border-radius:2px;background:${color}"></div>
+            ${name} &#8212; 月次データ（単位：千円）
+          </div>
+          <div style="overflow-x:auto">
+            <table class="biz-tbl">
+              <thead>
+                <tr>
+                  <th style="text-align:left">項目</th>
+                  ${months.map((m,mi)=>`<th style="${mi<=fi?'color:var(--text)':''}">${m}${mi<=fi?'&#9679;':''}</th>`).join('')}
+                </tr>
+              </thead>
+              <tbody>${tableRows}</tbody>
+            </table>
+          </div>
+        </div>
+        <div class="grid-2">
+          <div class="card">
+            <div class="card-title">&#128200; 売上推移</div>
+            <canvas id="chartBizSales${i}" height="200"></canvas>
+          </div>
+          <div class="card">
+            <div class="card-title">&#128176; 貢献利益推移</div>
+            <canvas id="chartBizOP${i}" height="200"></canvas>
+          </div>
         </div>
       </div>
-      <canvas id="chartBiz${i}" height="140"></canvas>
-    </div>`).join('');
+    `;
+  }).join('');
 
-  D.businesses.forEach((b,i)=>{
-    mkChart('chartBiz'+i,{type:'bar',data:{labels:months,datasets:[
-      {label:b.name,data:b.monthly.slice(0,fi+1),backgroundColor:COLORS[i%COLORS.length]+'99',borderRadius:3},
-    ]},options:{...CHART_OPTS,plugins:{...CHART_OPTS.plugins,legend:{display:false}}}});
-  });
+  // Render charts for active tab only
+  renderBizCharts(currentBizIdx);
+}
+
+function renderBizCharts(idx){
+  const name = D.businesses[idx]&&D.businesses[idx].name;
+  if(!name) return;
+  const detail = D.biz_detail[name];
+  if(!detail) return;
+  const fi = D.filled_idx;
+  const months = D.months;
+  const color = COLORS[idx%COLORS.length];
+
+  // Sales chart
+  const salesData = detail['売上'];
+  if(salesData){
+    mkChart('chartBizSales'+idx,{
+      type:'line',
+      data:{
+        labels:months,
+        datasets:[
+          {label:'本年実績',data:salesData.actual,borderColor:color,backgroundColor:color+'22',tension:.3,borderWidth:2,pointRadius:3},
+          {label:'計画',data:salesData.plan,borderColor:'#64748b',borderDash:[4,4],tension:.3,borderWidth:1.5,pointRadius:2},
+          {label:'前年実績',data:salesData.prev,borderColor:'#374151',borderDash:[2,3],tension:.3,borderWidth:1,pointRadius:2},
+        ]
+      },
+      options:{...CHART_OPTS}
+    });
+  }
+
+  // Contribution margin chart
+  const opData = detail['貢献利益'];
+  if(opData){
+    mkChart('chartBizOP'+idx,{
+      type:'bar',
+      data:{
+        labels:months,
+        datasets:[
+          {label:'本年実績',data:opData.actual,backgroundColor:opData.actual.map(v=>v>=0?color+'bb':'#ef444499'),borderRadius:3},
+          {label:'計画',data:opData.plan,backgroundColor:'#64748b44',borderRadius:3},
+        ]
+      },
+      options:{...CHART_OPTS}
+    });
+  }
+}
+
+function switchBizTab(idx){
+  currentBizIdx = idx;
+  // Update tabs
+  document.querySelectorAll('.biz-tab').forEach((t,i)=>t.classList.toggle('active',i===idx));
+  // Update sections
+  document.querySelectorAll('.biz-section').forEach((s,i)=>s.classList.toggle('active',i===idx));
+  // Render charts for this tab (lazy)
+  renderBizCharts(idx);
 }
 
 // ===== RANKING =====
