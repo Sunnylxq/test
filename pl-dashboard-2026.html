@@ -299,8 +299,6 @@ body{font-family:'UD デジタル 教科書体 NK','UDDigitalKyokasho-NK','Hirag
     <div class="nav-tab active" onclick="showPage('dashboard',this)">🏠 ダッシュボード</div>
     <div class="nav-tab" onclick="showPage('pl',this)">📋 PL詳細</div>
     <div class="nav-tab" onclick="showPage('biz',this)">🏢 事業別</div>
-    <div class="nav-tab" onclick="showPage('ranking',this)">🏆 ランキング</div>
-    <div class="nav-tab" onclick="showPage('forecast',this)">🔮 着地見込み</div>
     <div class="nav-tab" id="navUsers" style="display:none" onclick="showPage('users',this)">👥 ユーザー管理</div>
   </nav>
 
@@ -348,8 +346,8 @@ body{font-family:'UD デジタル 教科書体 NK','UDDigitalKyokasho-NK','Hirag
       <!-- アラート -->
       <div id="alertSection" style="margin-bottom:16px"></div>
 
-      <!-- Charts Row -->
-      <div class="grid-3" style="margin-bottom:14px">
+      <!-- Charts Row 1: 推移 -->
+      <div class="grid-2" style="margin-bottom:14px">
         <div class="card">
           <div class="card-title">📊 月次売上推移（千円）</div>
           <canvas id="chartSales" height="220"></canvas>
@@ -358,9 +356,16 @@ body{font-family:'UD デジタル 教科書体 NK','UDDigitalKyokasho-NK','Hirag
           <div class="card-title">💰 月次営業利益推移（千円）</div>
           <canvas id="chartOP" height="220"></canvas>
         </div>
+      </div>
+      <!-- Charts Row 2: 構成 -->
+      <div class="grid-2" style="margin-bottom:14px">
         <div class="card">
           <div class="card-title">🥧 事業別売上構成（累計）</div>
           <canvas id="chartPie" height="220"></canvas>
+        </div>
+        <div class="card">
+          <div class="card-title" id="chartPieMonthTitle">🥧 事業別売上構成（最新月）</div>
+          <canvas id="chartPieMonth" height="220"></canvas>
         </div>
       </div>
 
@@ -410,28 +415,6 @@ body{font-family:'UD デジタル 教科書体 NK','UDDigitalKyokasho-NK','Hirag
         <div class="biz-tabs" id="bizTabs"></div>
         <div class="biz-content-area" id="bizContent"></div>
       </div>
-    </div>
-
-    <!-- RANKING PAGE -->
-    <div class="page" id="page-ranking">
-      <div class="page-header">
-        <div>
-          <div class="page-title">🏆 事業ランキング</div>
-          <div class="page-sub">累計実績によるパフォーマンス比較</div>
-        </div>
-      </div>
-      <div class="grid-2" id="rankingContent"></div>
-    </div>
-
-    <!-- FORECAST PAGE -->
-    <div class="page" id="page-forecast">
-      <div class="page-header">
-        <div>
-          <div class="page-title">🔮 着地見込み</div>
-          <div class="page-sub">2026年度 年間着地見込み</div>
-        </div>
-      </div>
-      <div id="forecastContent"></div>
     </div>
 
     <!-- USERS PAGE -->
@@ -907,10 +890,20 @@ function renderDashboard(){
   // 事業別円グラフ
   const bizSums = D.businesses.map(b=>({name:b.name,sum:b.monthly.slice(0,fi+1).reduce((a,v)=>a+v,0)}));
   const total_sum = bizSums.reduce((a,b)=>a+b.sum,0);
+  const pieOpts = (total) => ({responsive:true,plugins:{legend:{position:'right',labels:{color:'#94a3b8',font:{size:10},boxWidth:10}},tooltip:{callbacks:{label:ctx=>`${ctx.label}: ${fmtM(ctx.raw)} (${(ctx.raw/total*100).toFixed(1)}%)`}}}});
   mkChart('chartPie',{type:'doughnut',data:{
     labels:bizSums.map(b=>b.name),
     datasets:[{data:bizSums.map(b=>Math.round(b.sum)),backgroundColor:COLORS.map(c=>c+'cc'),borderColor:'#0f1117',borderWidth:2}]
-  },options:{responsive:true,plugins:{legend:{position:'right',labels:{color:'#94a3b8',font:{size:10},boxWidth:10}},tooltip:{callbacks:{label:ctx=>`${ctx.label}: ${fmtM(ctx.raw)} (${(ctx.raw/total_sum*100).toFixed(1)}%)`}}}}});
+  },options:pieOpts(total_sum)});
+
+  // 最新月の事業別構成
+  const bizMonth = D.businesses.map(b=>({name:b.name,val:Math.max(0,b.monthly[fi]||0)}));
+  const total_month = bizMonth.reduce((a,b)=>a+b.val,0);
+  document.getElementById('chartPieMonthTitle').textContent = `🥧 事業別売上構成（${D.months[fi]}）`;
+  mkChart('chartPieMonth',{type:'doughnut',data:{
+    labels:bizMonth.map(b=>b.name),
+    datasets:[{data:bizMonth.map(b=>Math.round(b.val)),backgroundColor:COLORS.map(c=>c+'cc'),borderColor:'#0f1117',borderWidth:2}]
+  },options:pieOpts(total_month)});
 
   // 事業別 年間計画進捗率（3指標）
   const timeElapsed = (fi + 1) / 12 * 100; // 経過時間 %
