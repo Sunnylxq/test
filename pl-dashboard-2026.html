@@ -339,8 +339,8 @@ body{font-family:'UD デジタル 教科書体 NK','UDDigitalKyokasho-NK','Hirag
       <!-- アラート -->
       <div id="alertSection" style="margin-bottom:16px"></div>
 
-      <!-- Charts Row 1 -->
-      <div class="grid-2" style="margin-bottom:14px">
+      <!-- Charts Row -->
+      <div class="grid-3" style="margin-bottom:14px">
         <div class="card">
           <div class="card-title">📊 月次売上推移（千円）</div>
           <canvas id="chartSales" height="220"></canvas>
@@ -348,14 +348,6 @@ body{font-family:'UD デジタル 教科書体 NK','UDDigitalKyokasho-NK','Hirag
         <div class="card">
           <div class="card-title">💰 月次営業利益推移（千円）</div>
           <canvas id="chartOP" height="220"></canvas>
-        </div>
-      </div>
-
-      <!-- Charts Row 2 -->
-      <div class="grid-2" style="margin-bottom:14px">
-        <div class="card">
-          <div class="card-title">📐 利益率推移（%）</div>
-          <canvas id="chartMargin" height="220"></canvas>
         </div>
         <div class="card">
           <div class="card-title">🥧 事業別売上構成（累計）</div>
@@ -902,11 +894,6 @@ function renderDashboard(){
   ]},options:CHART_OPTS});
 
   // 利益率チャート
-  mkChart('chartMargin',{type:'line',data:{labels:months,datasets:[
-    {label:'本年',data:D.margin_actual.slice(0,fi+1).map(v=>+(v*100).toFixed(2)),borderColor:'#6366f1',tension:.3,pointRadius:4,borderWidth:2.5},
-    {label:'計画',data:D.margin_plan.slice(0,fi+1).map(v=>+(v*100).toFixed(2)),borderColor:'#94a3b8',borderDash:[5,4],tension:.3,pointRadius:2,borderWidth:1.5},
-    {label:'前年',data:D.margin_prev.slice(0,fi+1).map(v=>+(v*100).toFixed(2)),borderColor:'#334155',tension:.3,pointRadius:2,borderWidth:1.5},
-  ]},options:{...CHART_OPTS,scales:{...CHART_OPTS.scales,y:{...CHART_OPTS.scales.y,ticks:{color:'#64748b',font:{size:10},callback:v=>v+'%'}}}}});
 
   // 事業別円グラフ
   const bizSums = D.businesses.map(b=>({name:b.name,sum:b.monthly.slice(0,fi+1).reduce((a,v)=>a+v,0)}));
