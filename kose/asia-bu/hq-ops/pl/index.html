@@ -1078,7 +1078,7 @@ function renderBiz(){
         return `<td style="color:#a78bfa">${Math.round(v).toLocaleString()}</td>`;
       }).join('');
 
-      // 累計・着地見込み計算
+      // 累計・合計・着地見込み計算
       const fmtSummary = (v, style='', extraCls='')=>{
         const cls = extraCls + (v<0?' neg':'');
         if(v===0||v===undefined||v===null) return `<td class="${cls}" style="font-weight:700;${style}"><span style="color:var(--muted)">—</span></td>`;
@@ -1086,41 +1086,44 @@ function renderBiz(){
         if(metric==='客単価') return `<td class="${cls}" style="font-weight:700;${style}">${v.toFixed(1)}元</td>`;
         return `<td class="${cls}" style="font-weight:700;${style}">${Math.round(v).toLocaleString()}</td>`;
       };
-      // 累計: 1〜fi月の実績合計（CVR・客単価は平均）
+      const fmtRatio = (a, b, mi)=>{
+        if(mi > fi) return `<td style="color:var(--muted)">—</td>`;
+        if(!b || b===0) return `<td style="color:var(--muted)">—</td>`;
+        const r = a / b * 100;
+        const col = r>=100?'var(--green)':r>=90?'var(--yellow)':'var(--red)';
+        return `<td style="color:${col};font-weight:600">${r.toFixed(1)}%</td>`;
+      };
+      // 累計実績（1〜fi月）
       const cumActual = isRatio
         ? (merged.slice(0,fi+1).filter(v=>v>0).reduce((a,v)=>a+v,0) / (merged.slice(0,fi+1).filter(v=>v>0).length||1))
         : merged.slice(0,fi+1).reduce((a,v)=>a+v,0);
-      const cumPlan = isRatio
-        ? (m.plan.slice(0,fi+1).filter(v=>v>0).reduce((a,v)=>a+v,0) / (m.plan.slice(0,fi+1).filter(v=>v>0).length||1))
-        : m.plan.slice(0,fi+1).reduce((a,v)=>a+v,0);
-      const cumPrev = isRatio
-        ? ((m.prev||[]).slice(0,fi+1).filter(v=>v>0).reduce((a,v)=>a+v,0) / ((m.prev||[]).slice(0,fi+1).filter(v=>v>0).length||1))
-        : (m.prev||[]).slice(0,fi+1).reduce((a,v)=>a+v,0);
-      // 着地見込み: 累計実績 + fi+1〜11月の予測合計（CVR・客単価は全月平均）
+      // 年間合計（計画・前年は全12ヶ月合計）
+      const annualPlan = isRatio
+        ? (m.plan.filter(v=>v>0).reduce((a,v)=>a+v,0) / (m.plan.filter(v=>v>0).length||1))
+        : m.plan.reduce((a,v)=>a+v,0);
+      const annualPrev = isRatio
+        ? ((m.prev||[]).filter(v=>v>0).reduce((a,v)=>a+v,0) / ((m.prev||[]).filter(v=>v>0).length||1))
+        : (m.prev||[]).reduce((a,v)=>a+v,0);
+      // 着地見込み（本年実績のみ）
       const remainMonths = 12 - fi - 1;
-      let landingActual, landingPlan, landingPrev;
-      if(isRatio){
-        const allActual = [...merged.slice(0,fi+1), ...Array(remainMonths).fill(fcVal)];
-        landingActual = allActual.filter(v=>v>0).reduce((a,v)=>a+v,0)/(allActual.filter(v=>v>0).length||1);
-        const fcPlanVal = forecast(m.plan, fi, 3);
-        const allPlan = [...m.plan.slice(0,fi+1), ...Array(remainMonths).fill(fcPlanVal)];
-        landingPlan = allPlan.filter(v=>v>0).reduce((a,v)=>a+v,0)/(allPlan.filter(v=>v>0).length||1);
-        const fcPrevVal = forecast(m.prev||[], fi, 3);
-        const allPrev = [...(m.prev||[]).slice(0,fi+1), ...Array(remainMonths).fill(fcPrevVal)];
-        landingPrev = allPrev.filter(v=>v>0).reduce((a,v)=>a+v,0)/(allPrev.filter(v=>v>0).length||1);
-      } else {
-        landingActual = cumActual + fcVal * remainMonths;
-        const fcPlanVal = forecast(m.plan, fi, 3);
-        landingPlan = m.plan.slice(0,fi+1).reduce((a,v)=>a+v,0) + fcPlanVal * remainMonths;
-        const fcPrevVal = forecast(m.prev||[], fi, 3);
-        landingPrev = (m.prev||[]).slice(0,fi+1).reduce((a,v)=>a+v,0) + fcPrevVal * remainMonths;
-      }
+      const landingActual = isRatio
+        ? (()=>{ const all=[...merged.slice(0,fi+1),...Array(remainMonths).fill(fcVal)]; return all.filter(v=>v>0).reduce((a,v)=>a+v,0)/(all.filter(v=>v>0).length||1); })()
+        : cumActual + fcVal * remainMonths;
+      // 計画比・前年比（月別）
+      const planRatioCells  = months.map((mo,mi)=>fmtRatio(merged[mi], m.plan[mi], mi)).join('');
+      const prevRatioCells  = months.map((mo,mi)=>fmtRatio(merged[mi], (m.prev||[])[mi], mi)).join('');
+      // 累計の計画比・前年比
+      const cumPlanRatio = (()=>{ const p=isRatio?(m.plan.slice(0,fi+1).filter(v=>v>0).reduce((a,v)=>a+v,0)/(m.plan.slice(0,fi+1).filter(v=>v>0).length||1)):m.plan.slice(0,fi+1).reduce((a,v)=>a+v,0); return p>0?cumActual/p*100:0; })();
+      const cumPrevRatio = (()=>{ const p=isRatio?((m.prev||[]).slice(0,fi+1).filter(v=>v>0).reduce((a,v)=>a+v,0)/((m.prev||[]).slice(0,fi+1).filter(v=>v>0).length||1)):(m.prev||[]).slice(0,fi+1).reduce((a,v)=>a+v,0); return p>0?cumActual/p*100:0; })();
+      const fmtRatioVal = (r, extraCls='')=>{ if(!r) return `<td class="${extraCls}" style="font-weight:700;color:var(--muted)">—</td>`; const col=r>=100?'var(--green)':r>=90?'var(--yellow)':'var(--red)'; return `<td class="${extraCls}" style="font-weight:700;color:${col}">${r.toFixed(1)}%</td>`; };
 
       return `
         <tr class="metric-header"><td colspan="15">${metric}</td></tr>
         <tr class="actual"><td style="padding-left:16px">&nbsp;本年実績</td>${merged.map((v,mi)=>fmtCell(v,true,mi)).join('')}${fmtSummary(cumActual,'','cum-col')}${fmtSummary(landingActual,'color:#a78bfa')}</tr>
-        <tr class="plan"><td style="padding-left:16px">&nbsp;計画</td>${m.plan.map((v,mi)=>fmtCell(v,false,mi)).join('')}${fmtSummary(cumPlan,'','cum-col')}${fmtSummary(landingPlan,'color:#a78bfa')}</tr>
-        <tr class="prev"><td style="padding-left:16px">&nbsp;前年実績</td>${(m.prev||[]).map((v,mi)=>fmtCell(v,false,mi)).join('')}${fmtSummary(cumPrev,'','cum-col')}${fmtSummary(landingPrev,'color:#a78bfa')}</tr>
+        <tr class="plan"><td style="padding-left:16px">&nbsp;計画</td>${m.plan.map((v,mi)=>fmtCell(v,false,mi)).join('')}${fmtSummary(annualPlan,'','cum-col')}<td style="color:var(--muted);font-size:.7rem;text-align:center">年計</td></tr>
+        <tr style="font-size:.72rem"><td style="padding-left:16px;color:var(--accent)">&nbsp;計画比</td>${planRatioCells}${fmtRatioVal(cumPlanRatio,'cum-col')}<td style="color:var(--muted)">—</td></tr>
+        <tr class="prev"><td style="padding-left:16px">&nbsp;前年実績</td>${(m.prev||[]).map((v,mi)=>fmtCell(v,false,mi)).join('')}${fmtSummary(annualPrev,'','cum-col')}<td style="color:var(--muted);font-size:.7rem;text-align:center">年計</td></tr>
+        <tr style="font-size:.72rem"><td style="padding-left:16px;color:#fb923c">&nbsp;前年比</td>${prevRatioCells}${fmtRatioVal(cumPrevRatio,'cum-col')}<td style="color:var(--muted)">—</td></tr>
         <tr class="forecast"><td style="padding-left:16px">&nbsp;🔮予測</td>${forecastCells}<td class="cum-col" style="color:var(--muted)">—</td><td style="color:var(--muted)">—</td></tr>
       `;
     }).join('');
@@ -1153,7 +1156,7 @@ function renderBiz(){
                 <tr>
                   <th style="text-align:left">項目</th>
                   ${months.map((m,mi)=>`<th style="${mi<=fi?'color:var(--text);font-weight:700':''}">${m}${mi<=fi?'●':''}</th>`).join('')}
-                  <th style="color:var(--accent);font-weight:700;border-left:2px solid var(--border)">累計</th>
+                  <th style="color:var(--accent);font-weight:700;border-left:2px solid var(--border)">累計 / 年計</th>
                   <th style="color:#a78bfa;font-weight:700">着地見込み</th>
                 </tr>
               </thead>
