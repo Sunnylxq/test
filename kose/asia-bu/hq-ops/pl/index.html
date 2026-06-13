@@ -93,6 +93,7 @@ body{font-family:'UD デジタル 教科書体 NK','UDDigitalKyokasho-NK','Hirag
 .biz-tbl tr.metric-header td{background:var(--bg3);font-weight:700;color:var(--subtle);font-size:.72rem;border-top:2px solid var(--border)}
 .biz-tbl tr.metric-header td:first-child{background:var(--bg3)}
 .biz-tbl .neg{color:var(--red)!important}
+.biz-tbl td.cum-col{border-left:2px solid var(--border)!important}
 .biz-tbl .pos{color:var(--green)!important}
 .biz-tbl td.editable{cursor:pointer;transition:background .1s}
 .biz-tbl td.editable:hover{background:rgba(99,102,241,.12)!important;outline:1px solid rgba(99,102,241,.4)}
@@ -1002,12 +1003,50 @@ function renderBiz(){
         return `<td style="color:#a78bfa">${Math.round(v).toLocaleString()}</td>`;
       }).join('');
 
+      // 累計・着地見込み計算
+      const fmtSummary = (v, style='', extraCls='')=>{
+        const cls = extraCls + (v<0?' neg':'');
+        if(v===0||v===undefined||v===null) return `<td class="${cls}" style="font-weight:700;${style}"><span style="color:var(--muted)">—</span></td>`;
+        if(metric==='CVR') return `<td class="${cls}" style="font-weight:700;${style}">${(v*100).toFixed(2)}%</td>`;
+        if(metric==='客単価') return `<td class="${cls}" style="font-weight:700;${style}">${v.toFixed(1)}元</td>`;
+        return `<td class="${cls}" style="font-weight:700;${style}">${Math.round(v).toLocaleString()}</td>`;
+      };
+      // 累計: 1〜fi月の実績合計（CVR・客単価は平均）
+      const cumActual = isRatio
+        ? (merged.slice(0,fi+1).filter(v=>v>0).reduce((a,v)=>a+v,0) / (merged.slice(0,fi+1).filter(v=>v>0).length||1))
+        : merged.slice(0,fi+1).reduce((a,v)=>a+v,0);
+      const cumPlan = isRatio
+        ? (m.plan.slice(0,fi+1).filter(v=>v>0).reduce((a,v)=>a+v,0) / (m.plan.slice(0,fi+1).filter(v=>v>0).length||1))
+        : m.plan.slice(0,fi+1).reduce((a,v)=>a+v,0);
+      const cumPrev = isRatio
+        ? ((m.prev||[]).slice(0,fi+1).filter(v=>v>0).reduce((a,v)=>a+v,0) / ((m.prev||[]).slice(0,fi+1).filter(v=>v>0).length||1))
+        : (m.prev||[]).slice(0,fi+1).reduce((a,v)=>a+v,0);
+      // 着地見込み: 累計実績 + fi+1〜11月の予測合計（CVR・客単価は全月平均）
+      const remainMonths = 12 - fi - 1;
+      let landingActual, landingPlan, landingPrev;
+      if(isRatio){
+        const allActual = [...merged.slice(0,fi+1), ...Array(remainMonths).fill(fcVal)];
+        landingActual = allActual.filter(v=>v>0).reduce((a,v)=>a+v,0)/(allActual.filter(v=>v>0).length||1);
+        const fcPlanVal = forecast(m.plan, fi, 3);
+        const allPlan = [...m.plan.slice(0,fi+1), ...Array(remainMonths).fill(fcPlanVal)];
+        landingPlan = allPlan.filter(v=>v>0).reduce((a,v)=>a+v,0)/(allPlan.filter(v=>v>0).length||1);
+        const fcPrevVal = forecast(m.prev||[], fi, 3);
+        const allPrev = [...(m.prev||[]).slice(0,fi+1), ...Array(remainMonths).fill(fcPrevVal)];
+        landingPrev = allPrev.filter(v=>v>0).reduce((a,v)=>a+v,0)/(allPrev.filter(v=>v>0).length||1);
+      } else {
+        landingActual = cumActual + fcVal * remainMonths;
+        const fcPlanVal = forecast(m.plan, fi, 3);
+        landingPlan = m.plan.slice(0,fi+1).reduce((a,v)=>a+v,0) + fcPlanVal * remainMonths;
+        const fcPrevVal = forecast(m.prev||[], fi, 3);
+        landingPrev = (m.prev||[]).slice(0,fi+1).reduce((a,v)=>a+v,0) + fcPrevVal * remainMonths;
+      }
+
       return `
-        <tr class="metric-header"><td colspan="13">${metric}</td></tr>
-        <tr class="actual"><td style="padding-left:16px">&nbsp;本年実績</td>${merged.map((v,mi)=>fmtCell(v,true,mi)).join('')}</tr>
-        <tr class="plan"><td style="padding-left:16px">&nbsp;計画</td>${m.plan.map((v,mi)=>fmtCell(v,false,mi)).join('')}</tr>
-        <tr class="prev"><td style="padding-left:16px">&nbsp;前年実績</td>${(m.prev||[]).map((v,mi)=>fmtCell(v,false,mi)).join('')}</tr>
-        <tr class="forecast"><td style="padding-left:16px">&nbsp;🔮予測</td>${forecastCells}</tr>
+        <tr class="metric-header"><td colspan="15">${metric}</td></tr>
+        <tr class="actual"><td style="padding-left:16px">&nbsp;本年実績</td>${merged.map((v,mi)=>fmtCell(v,true,mi)).join('')}${fmtSummary(cumActual,'','cum-col')}${fmtSummary(landingActual,'color:#a78bfa')}</tr>
+        <tr class="plan"><td style="padding-left:16px">&nbsp;計画</td>${m.plan.map((v,mi)=>fmtCell(v,false,mi)).join('')}${fmtSummary(cumPlan,'','cum-col')}${fmtSummary(landingPlan,'color:#a78bfa')}</tr>
+        <tr class="prev"><td style="padding-left:16px">&nbsp;前年実績</td>${(m.prev||[]).map((v,mi)=>fmtCell(v,false,mi)).join('')}${fmtSummary(cumPrev,'','cum-col')}${fmtSummary(landingPrev,'color:#a78bfa')}</tr>
+        <tr class="forecast"><td style="padding-left:16px">&nbsp;🔮予測</td>${forecastCells}<td class="cum-col" style="color:var(--muted)">—</td><td style="color:var(--muted)">—</td></tr>
       `;
     }).join('');
 
@@ -1039,6 +1078,8 @@ function renderBiz(){
                 <tr>
                   <th style="text-align:left">項目</th>
                   ${months.map((m,mi)=>`<th style="${mi<=fi?'color:var(--text);font-weight:700':''}">${m}${mi<=fi?'●':''}</th>`).join('')}
+                  <th style="color:var(--accent);font-weight:700;border-left:2px solid var(--border)">累計</th>
+                  <th style="color:#a78bfa;font-weight:700">着地見込み</th>
                 </tr>
               </thead>
               <tbody>${tableRows}</tbody>
