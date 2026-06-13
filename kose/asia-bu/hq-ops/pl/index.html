@@ -104,13 +104,17 @@ body{font-family:'UD デジタル 教科書体 NK','UDDigitalKyokasho-NK','Hirag
 .biz-tbl td.fc-manual{outline:1px dashed #fbbf2488}
 .forecast-section{margin-top:16px}
 .analysis-section{margin-top:16px}
-.analysis-current{background:var(--bg2);border:1px solid rgba(99,102,241,.3);border-radius:10px;padding:14px}
-.analysis-current textarea{width:100%;background:transparent;border:none;color:var(--text);font-family:inherit;font-size:.8rem;line-height:1.6;resize:vertical;outline:none;min-height:80px}
-.analysis-month-label{font-size:.72rem;font-weight:700;color:var(--accent);margin-bottom:6px}
-.analysis-archive{margin-top:12px;display:flex;flex-direction:column;gap:6px}
-.analysis-archive-item{background:var(--bg3);border-left:3px solid var(--border);border-radius:0 6px 6px 0;padding:8px 12px}
-.analysis-archive-item .arc-month{font-size:.68rem;font-weight:700;color:var(--muted);margin-bottom:3px}
-.analysis-archive-item .arc-text{font-size:.77rem;color:var(--subtle);white-space:pre-wrap;line-height:1.5}
+.analysis-tabs{display:flex;flex-wrap:wrap;gap:4px;margin-bottom:10px}
+.analysis-tab{padding:3px 10px;border-radius:6px;font-size:.7rem;cursor:pointer;border:1px solid var(--border);background:var(--bg3);color:var(--muted);transition:all .15s;user-select:none;position:relative}
+.analysis-tab:hover{border-color:var(--accent);color:var(--text)}
+.analysis-tab.active{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:700}
+.analysis-tab .tab-dot{position:absolute;top:2px;right:3px;width:5px;height:5px;border-radius:50%;background:#f59e0b}
+.analysis-editor{background:var(--bg2);border:1px solid rgba(99,102,241,.3);border-radius:10px;padding:12px;min-height:90px}
+.analysis-editor-header{font-size:.7rem;font-weight:700;color:var(--accent);margin-bottom:8px}
+.analysis-content{min-height:70px;outline:none;font-size:.8rem;line-height:1.7;color:var(--text);word-break:break-word}
+.analysis-content:empty:before{content:attr(data-placeholder);color:var(--muted);pointer-events:none}
+.analysis-content img{max-width:100%;border-radius:6px;margin:4px 0;display:block}
+.analysis-hint{font-size:.63rem;color:var(--muted);margin-top:6px}
 .forecast-kpi-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:16px}
 .forecast-kpi{background:var(--bg3);border:1px solid rgba(99,102,241,.2);border-radius:8px;padding:12px;text-align:center}
 .forecast-kpi .val{font-size:1.1rem;font-weight:800;color:#a78bfa}
@@ -1073,37 +1077,91 @@ function onYearChange(year){
 // ===== 差異分析 =====
 function analysisKey(name, year, mi){ return `bizAnalysis_${year}_${name}_${mi}`; }
 function getAnalysis(name, mi){ return localStorage.getItem(analysisKey(name, currentYear, mi)) || ''; }
-function saveAnalysis(name, mi, text){ localStorage.setItem(analysisKey(name, currentYear, mi), text); }
+function saveAnalysis(name, mi, html){ localStorage.setItem(analysisKey(name, currentYear, mi), html); }
+
+// track which tab is active per business
+const _analysisCurTab = {};
 
 function renderAnalysisSection(name, fi, months){
-  const cur = getAnalysis(name, fi);
-  // 过去月アーカイブ（fi-1〜0、テキストがあるもの）
-  const archives = [];
-  for(let mi = fi-1; mi >= 0; mi--){
-    const t = getAnalysis(name, mi);
-    if(t.trim()) archives.push({mi, month: months[mi], text: t});
-  }
+  const sn = name.replace(/[^\w]/g,'_');
+  const tabs = months.map((m,mi)=>{
+    const hasContent = getAnalysis(name,mi).trim().length > 0;
+    const isActive = mi === fi;
+    return `<div class="analysis-tab${isActive?' active':''}" id="atab_${sn}_${mi}"
+      onclick="switchAnalysisTab('${name.replace(/'/g,"\\'")}',${mi})">${m}${hasContent?`<span class="tab-dot"></span>`:''}</div>`;
+  }).join('');
+  const html = getAnalysis(name, fi);
   return `
     <div class="analysis-section">
-      <div style="font-size:.8rem;font-weight:700;color:var(--text);margin-bottom:10px">📝 差異分析・コメント</div>
-      <div class="analysis-current">
-        <div class="analysis-month-label">${months[fi]} （今月 — 編集可）</div>
-        <textarea id="analysisInput_${name.replace(/[^\w]/g,'_')}"
-          placeholder="売上差異の要因、施策効果、来月の見通しなど..."
-          onblur="saveAnalysis('${name.replace(/'/g,"\\'")}', ${fi}, this.value)"
-          onkeydown="if(event.ctrlKey&&event.key==='Enter')this.blur()"
-        >${cur}</textarea>
-        <div style="font-size:.65rem;color:var(--muted);margin-top:4px">Ctrl+Enter または フォーカスを外すと自動保存。翌月になると自動アーカイブ。</div>
+      <div style="font-size:.8rem;font-weight:700;color:var(--text);margin-bottom:8px">📝 差異分析・コメント</div>
+      <div class="analysis-tabs" id="atabs_${sn}">${tabs}</div>
+      <div class="analysis-editor" id="aeditor_${sn}">
+        <div class="analysis-editor-header" id="aeditor_label_${sn}">${months[fi]}</div>
+        <div class="analysis-content" id="acontent_${sn}"
+          contenteditable="true"
+          data-placeholder="売上差異の要因、施策効果、来月の見通しなど（テキスト・画像を貼り付け可）"
+          onblur="saveAnalysisFromEditor('${name.replace(/'/g,"\\'")}', '${sn}')"
+          onpaste="handleAnalysisPaste(event,'${name.replace(/'/g,"\\'")}','${sn}')"
+        >${html}</div>
+        <div class="analysis-hint">フォーカスを外すと自動保存 · 画像も貼り付け可</div>
       </div>
-      ${archives.length ? `
-      <div class="analysis-archive">
-        ${archives.map(a=>`
-        <div class="analysis-archive-item">
-          <div class="arc-month">${a.month}</div>
-          <div class="arc-text">${a.text.replace(/</g,'&lt;')}</div>
-        </div>`).join('')}
-      </div>` : ''}
     </div>`;
+}
+
+function switchAnalysisTab(name, mi){
+  const sn = name.replace(/[^\w]/g,'_');
+  // save current before switching
+  saveAnalysisFromEditor(name, sn);
+  // update tabs
+  const tabsEl = document.getElementById('atabs_'+sn);
+  if(!tabsEl) return;
+  tabsEl.querySelectorAll('.analysis-tab').forEach((el,i)=>el.classList.toggle('active',i===mi));
+  // update label
+  const labelEl = document.getElementById('aeditor_label_'+sn);
+  if(labelEl) labelEl.textContent = D.months[mi];
+  // update content
+  const contentEl = document.getElementById('acontent_'+sn);
+  if(contentEl) contentEl.innerHTML = getAnalysis(name, mi);
+  _analysisCurTab[sn] = mi;
+}
+
+function saveAnalysisFromEditor(name, sn){
+  const contentEl = document.getElementById('acontent_'+sn);
+  if(!contentEl) return;
+  const mi = _analysisCurTab[sn] !== undefined ? _analysisCurTab[sn] : D.filled_idx;
+  const html = contentEl.innerHTML;
+  saveAnalysis(name, mi, html);
+  // refresh dot on tab
+  const tabEl = document.getElementById(`atab_${sn}_${mi}`);
+  if(tabEl){
+    const hasContent = html.trim().length > 0;
+    const dot = tabEl.querySelector('.tab-dot');
+    if(hasContent && !dot){
+      const d = document.createElement('span');
+      d.className='tab-dot';
+      tabEl.appendChild(d);
+    } else if(!hasContent && dot){
+      dot.remove();
+    }
+  }
+}
+
+function handleAnalysisPaste(e, name, sn){
+  const items = e.clipboardData && e.clipboardData.items;
+  if(!items) return;
+  for(const item of items){
+    if(item.type.startsWith('image/')){
+      e.preventDefault();
+      const blob = item.getAsFile();
+      const reader = new FileReader();
+      reader.onload = ev => {
+        document.execCommand('insertHTML',false,`<img src="${ev.target.result}" style="max-width:100%">`);
+        saveAnalysisFromEditor(name, sn);
+      };
+      reader.readAsDataURL(blob);
+      return;
+    }
+  }
 }
 
 function renderBiz(){
@@ -1449,7 +1507,11 @@ document.addEventListener('click', e => {
 // Pre-fill 差異分析 from Excel (2026年5月)
 function prefillAnalysis(name, year, mi, text){
   const key = 'bizAnalysis_'+year+'_'+name+'_'+mi;
-  if(!localStorage.getItem(key)) localStorage.setItem(key, text);
+  if(!localStorage.getItem(key)){
+    // convert plain text to HTML for contenteditable storage
+    const html = text.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\n/g,'<br>');
+    localStorage.setItem(key, html);
+  }
 }
   prefillAnalysis("ADD TMALL", 2026, 4, `【売上単月】　60,277千円　　計画比１００．１％、前年比１０９．３％、堅調に推移した。
 【売上累計】 223,883千円　計画比１０１．9％、前年比10３.4％と、ともに順調に推移。
