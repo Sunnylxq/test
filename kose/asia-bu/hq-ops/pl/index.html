@@ -1575,8 +1575,29 @@ function startEdit(td, name, metric, mi, rowType){
   const cur = parseFloat(td.dataset.val)||0;
   td.className = 'editing';
   const rt = rowType||'fc';
-  td.innerHTML = `<input type="number" value="${cur===0?'':cur}" placeholder="0" autofocus onblur="commitEdit(this,'${name}','${metric}',${mi},'${rt}')" onkeydown="if(event.key==='Enter')this.blur();if(event.key==='Escape'){this.blur();}">`;
+  const esc = name.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+  td.innerHTML = `<input type="number" value="${cur===0?'':cur}" placeholder="0" autofocus
+    onblur="commitEdit(this,'${esc}','${metric}',${mi},'${rt}')"
+    onkeydown="if(event.key==='Enter')this.blur();if(event.key==='Escape')this.blur();"
+    onpaste="handleRowPaste(event,'${esc}','${metric}',${mi},'${rt}')">`;
   td.querySelector('input').focus();
+}
+
+function handleRowPaste(e, name, metric, startMi, rowType){
+  const raw = e.clipboardData.getData('text');
+  // Split by tab or newline, clean commas/spaces
+  const parts = raw.split(/[\t\n]/).map(s=>s.trim().replace(/,/g,''));
+  if(parts.length < 2){ return; } // single value — let browser handle normally
+  e.preventDefault();
+  const setter = rowType==='plan' ? setPlanEdit : rowType==='prev' ? setPrevEdit : setBizEdit;
+  parts.forEach((s,i)=>{
+    const mi = startMi + i;
+    if(mi >= 12) return;
+    const v = parseFloat(s);
+    if(!isNaN(v)) setter(name, metric, mi, v);
+  });
+  renderBiz();
+  renderBizCharts(currentBizIdx);
 }
 
 function commitEdit(input, name, metric, mi, rowType){
