@@ -1188,6 +1188,12 @@ function renderBiz(){
     const metrics = ['店消','売上','原価','粗利','販管費','貢献利益','UV','CVR','客単価'];
     const color = COLORS[i%COLORS.length];
 
+    // 売上データ（原価率・利益率計算用）
+    const salesM = detail['売上'];
+    const salesMerged = salesM ? getMergedActual(name,'売上',salesM.actual) : Array(12).fill(0);
+    const salesPlanArr = salesM ? salesM.plan.map((v,mi)=>{ const e=getPlanEdit(name,'売上',mi); return e!==null?e:v; }) : Array(12).fill(0);
+    const salesPrevArr = salesM ? (salesM.prev||[]).map((v,mi)=>{ const e=getPrevEdit(name,'売上',mi); return e!==null?e:v; }) : Array(12).fill(0);
+
     // テーブル行生成
     const tableRows = metrics.map(metric=>{
       const m = detail[metric];
@@ -1277,19 +1283,121 @@ function renderBiz(){
         return `<td class="${cls}" ${editAttr} data-val="${v||0}">${display}</td>`;
       };
 
-      return `
-        <tr class="metric-header"><td colspan="15">${metric}</td></tr>
-        <tr class="actual"><td style="padding-left:16px">&nbsp;本年実績</td>${merged.map((v,mi)=>fmtCell(v,true,mi)).join('')}${fmtSummary(cumActual,'','cum-col')}${fmtSummary(landingActual,'color:#a78bfa')}</tr>
-        <tr class="plan"><td style="padding-left:16px">&nbsp;計画</td>${planArr.map((v,mi)=>fmtPlanCell(v,mi)).join('')}${fmtSummary(annualPlan,'','cum-col')}<td style="color:var(--muted);font-size:.7rem;text-align:center">年計</td></tr>
-        <tr style="font-size:.72rem"><td style="padding-left:16px;color:var(--accent)">&nbsp;計画比</td>${planRatioCells}${fmtRatioVal(cumPlanRatio,'cum-col')}<td style="color:var(--muted)">—</td></tr>
-        <tr class="prev"><td style="padding-left:16px">&nbsp;前年実績</td>${prevArr.map((v,mi)=>fmtPrevCell(v,mi)).join('')}${fmtSummary(annualPrev,'','cum-col')}<td style="color:var(--muted);font-size:.7rem;text-align:center">年計</td></tr>
-        <tr style="font-size:.72rem"><td style="padding-left:16px;color:#fb923c">&nbsp;前年比</td>${prevRatioCells}${fmtRatioVal(cumPrevRatio,'cum-col')}<td style="color:var(--muted)">—</td></tr>
-        <tr class="forecast"><td style="padding-left:16px">&nbsp;🔮予測</td>${forecastCells}<td class="cum-col" style="color:var(--muted)">—</td><td style="color:var(--muted)">—</td></tr>
-      `;
+      // 差異セル（過去月のみ表示）
+      const fmtDiff = (a, b, mi)=>{
+        if(mi > fi) return `<td style="color:var(--muted)">—</td>`;
+        const d = a - b;
+        if(d===0||isNaN(d)) return `<td style="color:var(--muted)">—</td>`;
+        const col = d>=0?'var(--green)':'var(--red)';
+        let display;
+        if(metric==='CVR') display=(d*100).toFixed(2)+'%';
+        else if(metric==='客単価') display=d.toFixed(1)+'元';
+        else display=(d>0?'+':'')+Math.round(d).toLocaleString();
+        return `<td style="color:${col};font-size:.72rem">${display}</td>`;
+      };
+      // 累計差異
+      const fmtDiffSummary = (a, b, extraCls='')=>{
+        const d = a - b;
+        if(d===0||isNaN(d)) return `<td class="${extraCls}" style="font-weight:700;color:var(--muted)">—</td>`;
+        const col = d>=0?'var(--green)':'var(--red)';
+        let display;
+        if(metric==='CVR') display=(d*100).toFixed(2)+'%';
+        else if(metric==='客単価') display=d.toFixed(1)+'元';
+        else display=(d>0?'+':'')+Math.round(d).toLocaleString();
+        return `<td class="${extraCls}" style="font-weight:700;color:${col}">${display}</td>`;
+      };
+      // 本年見込み行セル（過去=実績色、未来=紫）
+      const fcRowCells = months.map((mo,mi)=>{
+        const v = fcMonthly[mi];
+        if(mi<=fi){
+          // 過去は実績と同様スタイル
+          let display;
+          if(v===0||v===undefined||v===null) display='<span style="color:var(--muted)">—</span>';
+          else if(metric==='CVR') display=(v*100).toFixed(2)+'%';
+          else if(metric==='客単価') display=v.toFixed(1)+'元';
+          else display=Math.round(v).toLocaleString();
+          return `<td data-val="${v||0}">${display}</td>`;
+        } else {
+          const hasManual = (()=>{ const e=getBizEdit(name,metric,mi); return e!==null&&e!==0; })();
+          const editAttr = canEdit() ? `class="editable${hasManual?' fc-manual':''}" onclick="startEdit(this,'${name}','${metric}',${mi})"` : '';
+          let display;
+          if(metric==='CVR') display=(v*100).toFixed(2)+'%';
+          else if(metric==='客単価') display=v.toFixed(1)+'元';
+          else display=Math.round(v).toLocaleString();
+          return `<td ${editAttr} data-val="${v||0}" style="color:${hasManual?'#fbbf24':'#a78bfa'}">${display}</td>`;
+        }
+      }).join('');
+      const fcLanding = isRatio
+        ? (fcMonthly.filter(v=>v>0).reduce((a,v)=>a+v,0)/(fcMonthly.filter(v=>v>0).length||1))
+        : fcMonthly.reduce((a,v)=>a+v,0);
+      // 累計前年・計画
+      const cumPlan = isRatio
+        ? (planArr.slice(0,fi+1).filter(v=>v>0).reduce((a,v)=>a+v,0)/(planArr.slice(0,fi+1).filter(v=>v>0).length||1))
+        : planArr.slice(0,fi+1).reduce((a,v)=>a+v,0);
+      const cumPrev = isRatio
+        ? (prevArr.slice(0,fi+1).filter(v=>v>0).reduce((a,v)=>a+v,0)/(prevArr.slice(0,fi+1).filter(v=>v>0).length||1))
+        : prevArr.slice(0,fi+1).reduce((a,v)=>a+v,0);
+      // 原価率/利益率ヘルパー
+      const fmtRatePct = (num, den)=>{
+        if(!den||den===0) return `<td style="color:var(--muted)">—</td>`;
+        return `<td style="color:var(--muted);font-size:.72rem">${(num/den*100).toFixed(1)}%</td>`;
+      };
+      const fmtRatePctSummary = (num, den, extraCls='')=>{
+        if(!den||den===0) return `<td class="${extraCls}" style="color:var(--muted)">—</td>`;
+        return `<td class="${extraCls}" style="color:var(--muted);font-weight:700">${(num/den*100).toFixed(1)}%</td>`;
+      };
+
+      // 表示名（貢献利益→営業利益）
+      const displayName = metric==='貢献利益'?'営業利益':metric;
+
+      // メトリック種別に応じた行構造
+      const isUVCVR = metric==='UV'||metric==='CVR'||metric==='客単価';
+      const isGenka = metric==='原価';
+      const isArari = metric==='粗利';
+      const isKoken = metric==='貢献利益';
+      const hasFcRow = !isUVCVR;
+
+      let rows = `<tr class="metric-header"><td colspan="15">${displayName}</td></tr>`;
+
+      // 1. 本年実績
+      rows += `<tr class="actual"><td style="padding-left:16px">&nbsp;本年実績</td>${merged.map((v,mi)=>fmtCell(v,true,mi)).join('')}${fmtSummary(cumActual,'','cum-col')}`;
+      if(isUVCVR) rows += `<td style="color:var(--muted);font-size:.7rem;text-align:center">—</td>`;
+      else rows += fmtSummary(landingActual,'color:#a78bfa');
+      rows += `</tr>`;
+
+      // 2. 本年見込み（UV/CVR/客単価以外）
+      if(hasFcRow){
+        rows += `<tr class="fc-row"><td style="padding-left:16px;color:#a78bfa;font-style:italic">&nbsp;本年見込み</td>${fcRowCells}${fmtSummary(cumActual,'color:#a78bfa','cum-col')}${fmtSummary(fcLanding,'color:#a78bfa;font-weight:700;font-style:italic')}</tr>`;
+      }
+
+      // 3. 前年実績
+      rows += `<tr class="prev"><td style="padding-left:16px">&nbsp;前年実績</td>${prevArr.map((v,mi)=>fmtPrevCell(v,mi)).join('')}${fmtSummary(annualPrev,'','cum-col')}<td style="color:var(--muted);font-size:.7rem;text-align:center">年計</td></tr>`;
+
+      // 4. 計画
+      rows += `<tr class="plan"><td style="padding-left:16px">&nbsp;計画</td>${planArr.map((v,mi)=>fmtPlanCell(v,mi)).join('')}${fmtSummary(annualPlan,'','cum-col')}<td style="color:var(--muted);font-size:.7rem;text-align:center">年計</td></tr>`;
+
+      if(isGenka){
+        // 原価率3行
+        rows += `<tr style="font-size:.72rem"><td style="padding-left:16px;color:var(--muted)">&nbsp;本年原価率</td>${months.map((mo,mi)=>mi<=fi?fmtRatePct(salesMerged[mi]?merged[mi]/salesMerged[mi]*100:0,100):`<td style="color:var(--muted)">—</td>`).join('')}${fmtRatePctSummary(cumActual,salesMerged.slice(0,fi+1).reduce((a,v)=>a+v,0),'cum-col')}<td style="color:var(--muted)">—</td></tr>`;
+        rows += `<tr style="font-size:.72rem"><td style="padding-left:16px;color:var(--muted)">&nbsp;前年原価率</td>${months.map((mo,mi)=>mi<=fi?fmtRatePct(salesPrevArr[mi]?prevArr[mi]/salesPrevArr[mi]*100:0,100):`<td style="color:var(--muted)">—</td>`).join('')}${fmtRatePctSummary(cumPrev,salesPrevArr.slice(0,fi+1).reduce((a,v)=>a+v,0),'cum-col')}<td style="color:var(--muted)">—</td></tr>`;
+        rows += `<tr style="font-size:.72rem"><td style="padding-left:16px;color:var(--muted)">&nbsp;計画原価率</td>${months.map((mo,mi)=>mi<=fi?fmtRatePct(salesPlanArr[mi]?planArr[mi]/salesPlanArr[mi]*100:0,100):`<td style="color:var(--muted)">—</td>`).join('')}${fmtRatePctSummary(cumPlan,salesPlanArr.slice(0,fi+1).reduce((a,v)=>a+v,0),'cum-col')}<td style="color:var(--muted)">—</td></tr>`;
+      } else if(isKoken){
+        // 利益率3行
+        rows += `<tr style="font-size:.72rem"><td style="padding-left:16px;color:var(--muted)">&nbsp;本年利益率</td>${months.map((mo,mi)=>mi<=fi?fmtRatePct(salesMerged[mi]?merged[mi]/salesMerged[mi]*100:0,100):`<td style="color:var(--muted)">—</td>`).join('')}${fmtRatePctSummary(cumActual,salesMerged.slice(0,fi+1).reduce((a,v)=>a+v,0),'cum-col')}<td style="color:var(--muted)">—</td></tr>`;
+        rows += `<tr style="font-size:.72rem"><td style="padding-left:16px;color:var(--muted)">&nbsp;前年利益率</td>${months.map((mo,mi)=>mi<=fi?fmtRatePct(salesPrevArr[mi]?prevArr[mi]/salesPrevArr[mi]*100:0,100):`<td style="color:var(--muted)">—</td>`).join('')}${fmtRatePctSummary(cumPrev,salesPrevArr.slice(0,fi+1).reduce((a,v)=>a+v,0),'cum-col')}<td style="color:var(--muted)">—</td></tr>`;
+        rows += `<tr style="font-size:.72rem"><td style="padding-left:16px;color:var(--muted)">&nbsp;計画利益率</td>${months.map((mo,mi)=>mi<=fi?fmtRatePct(salesPlanArr[mi]?planArr[mi]/salesPlanArr[mi]*100:0,100):`<td style="color:var(--muted)">—</td>`).join('')}${fmtRatePctSummary(cumPlan,salesPlanArr.slice(0,fi+1).reduce((a,v)=>a+v,0),'cum-col')}<td style="color:var(--muted)">—</td></tr>`;
+      } else if(!isArari){
+        // 店消・売上・販管費・UV・CVR・客単価: 前年比、前年差異、計画比、計画差異
+        rows += `<tr style="font-size:.72rem"><td style="padding-left:16px;color:#fb923c">&nbsp;前年比</td>${prevRatioCells}${fmtRatioVal(cumPrevRatio,'cum-col')}<td style="color:var(--muted)">—</td></tr>`;
+        rows += `<tr style="font-size:.72rem"><td style="padding-left:16px;color:var(--subtle)">&nbsp;前年差異</td>${months.map((mo,mi)=>fmtDiff(merged[mi],prevArr[mi],mi)).join('')}${fmtDiffSummary(cumActual,cumPrev,'cum-col')}<td style="color:var(--muted)">—</td></tr>`;
+        rows += `<tr style="font-size:.72rem"><td style="padding-left:16px;color:var(--accent)">&nbsp;計画比</td>${planRatioCells}${fmtRatioVal(cumPlanRatio,'cum-col')}<td style="color:var(--muted)">—</td></tr>`;
+        rows += `<tr style="font-size:.72rem"><td style="padding-left:16px;color:var(--subtle)">&nbsp;計画差異</td>${months.map((mo,mi)=>fmtDiff(merged[mi],planArr[mi],mi)).join('')}${fmtDiffSummary(cumActual,cumPlan,'cum-col')}<td style="color:var(--muted)">—</td></tr>`;
+      }
+
+      return rows;
     }).join('');
 
     // 予測サマリー計算 (売上・貢献利益)
-    const salesM = detail['売上'];
     const opM = detail['貢献利益'];
     const mergedSales = salesM ? getMergedActual(name,'売上',salesM.actual) : [];
     const mergedOP = opM ? getMergedActual(name,'貢献利益',opM.actual) : [];
