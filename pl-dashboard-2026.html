@@ -406,7 +406,7 @@ body{font-family:'UD デジタル 教科書体 NK','UDDigitalKyokasho-NK','Hirag
         👁️ あなたは <b>Viewer</b> です。データの閲覧のみ可能です。編集・追加はできません。
       </div>
       <div class="card" style="overflow-x:auto;padding:0">
-        <table class="tbl" id="plTable"></table>
+        <div id="plTable"></div>
       </div>
     </div>
 
@@ -961,58 +961,164 @@ function renderDashboard(){
 }
 
 // ===== PL TABLE =====
+function forecastPL(dataObj, fi){
+  // Returns 12-element array: actuals for past months, forecast for future
+  const actual = dataObj.actual || [];
+  const prev = dataObj.prev || [];
+  const actuals = actual.slice(0,fi+1).filter(v=>v&&v!==0);
+  const avgActual = actuals.length ? actuals.reduce((a,v)=>a+v,0)/actuals.length : 0;
+  const yoyRatios = [];
+  for(let i=0;i<=fi;i++){ if(actual[i]&&prev[i]) yoyRatios.push(actual[i]/prev[i]); }
+  const avgYoy = yoyRatios.length ? yoyRatios.reduce((a,v)=>a+v,0)/yoyRatios.length : null;
+  return Array.from({length:12},(_,mi)=>{
+    if(mi<=fi) return actual[mi]||0;
+    if(avgYoy && prev[mi]) return prev[mi]*avgYoy;
+    return avgActual;
+  });
+}
+
 function renderPL(){
   const fi = D.filled_idx;
   const months = D.months;
 
-  const rows = [
-    {label:'売上高',  key:'sales',  cls:'',     style:'font-weight:600'},
-    {label:'　前年',   isPrev:'sales', cls:'muted'},
-    {label:'　計画',   isPlan:'sales', cls:'muted'},
-    {label:'　前年比', isYoy:'sales',  cls:'muted'},
-    {sep:true},
-    {label:'売上原価', key:'cogs',   cls:''},
-    {label:'粗利益',   key:'gross',  cls:'green', style:'font-weight:700'},
-    {sep:true},
-    {label:'販管費',   key:'sg',     cls:''},
-    {label:'営業利益', key:'op',     cls:'green', style:'font-weight:700'},
-    {label:'　前年',   isPrev:'op',  cls:'muted'},
-    {label:'　計画',   isPlan:'op',  cls:'muted'},
-    {sep:true},
-    {label:'利益率（本年）', isMarginA:true, cls:''},
-    {label:'利益率（計画）', isMarginP:true, cls:'muted'},
-    {label:'利益率（前年）', isMarginV:true, cls:'muted'},
-  ];
+  // Helper: format number
+  const fmtN = v => (v===0||v===undefined||v===null) ? '<span style="color:var(--muted)">—</span>' : Math.round(v).toLocaleString();
+  const fmtPct = v => (v===0||v===undefined||v===null) ? '<span style="color:var(--muted)">—</span>' : v.toFixed(1)+'%';
+  const ratioColor = r => r>=100?'var(--green)':r>=90?'var(--yellow)':'var(--red)';
+  const diffColor = d => d>0?'var(--green)':d<0?'var(--red)':'var(--muted)';
+  const fmtRatio = (a,b) => { if(!b||b===0) return '<span style="color:var(--muted)">—</span>'; const r=a/b*100; return `<span style="color:${ratioColor(r)};font-weight:600">${r.toFixed(1)}%</span>`; };
+  const fmtDiff  = (a,b) => { if(a===0&&b===0) return '<span style="color:var(--muted)">—</span>'; const d=a-b; return `<span style="color:${diffColor(d)}">${d>0?'+':''}${Math.round(d).toLocaleString()}</span>`; };
+  const fmtRatePct = (v) => v===0?'<span style="color:var(--muted)">—</span>':`<span style="color:var(--subtle)">${v.toFixed(1)}%</span>`;
 
-  let html = '<thead><tr><th class="left" style="min-width:160px">項目</th>';
-  months.forEach((m,i)=>{
-    html += `<th ${i>fi?'style="opacity:.4"':''}>${m}</th>`;
-  });
-  html += '<th>累計</th></thead><tbody>';
+  // Precompute forecasts
+  const fcSales = forecastPL(D.sales, fi);
+  const fcCogs  = forecastPL(D.cogs,  fi);
+  const fcGross = forecastPL(D.gross, fi);
+  const fcSG    = forecastPL(D.sg,    fi);
+  const fcOP    = forecastPL(D.op,    fi);
+  const fcTenso = D.tenso ? forecastPL(D.tenso, fi) : null;
 
-  rows.forEach(row=>{
-    if(row.sep){html+='<tr><td colspan="'+(14)+'" style="height:4px;background:var(--bg2)"></td></tr>';return;}
-    html += `<tr><td class="left ${row.cls||''}" style="${row.style||''}">${row.label}</td>`;
-    let cumVal = 0;
-    months.forEach((m,i)=>{
-      let v = 0, txt = '';
-      if(row.key)        { v = D[row.key].actual[i]; txt = i<=fi && v!==0 ? fmt(v) : '—'; cumVal += i<=fi ? v : 0; }
-      else if(row.isPrev){ v = D[row.isPrev].prev?.[i]||0; txt = fmt(v); }
-      else if(row.isPlan){ v = D[row.isPlan].plan?.[i]||0; txt = fmt(v); }
-      else if(row.isYoy) { const a=D.sales.actual[i]||0; const p=D.sales.prev[i]||1; v=(a-p)/p*100; txt = i<=fi?(v>=0?'<span style="color:var(--green)">▲'+v.toFixed(1)+'%</span>':'<span style="color:var(--red)">▼'+Math.abs(v).toFixed(1)+'%</span>'):'—'; }
-      else if(row.isMarginA){ v=D.margin_actual[i]||0; txt = i<=fi && v!==0 ? pct(v*100) : '—'; cumVal += i<=fi ? (v*100) : 0; }
-      else if(row.isMarginP){ v=D.margin_plan[i]||0;   txt = pct(v*100); }
-      else if(row.isMarginV){ v=D.margin_prev[i]||0;   txt = pct(v*100); }
-      html += `<td class="${row.cls||''}" ${i>fi?'style="opacity:.4"':''}>${txt}</td>`;
-    });
-    // 累計列
-    let cumTxt = '';
-    if(row.key)         cumTxt = fmt(cumVal);
-    else if(row.isMarginA) { cumTxt = pct(D.sales.cum>0?D.op.cum/D.sales.cum*100:0); }
-    else cumTxt = '—';
-    html += `<td class="${row.cls||''}" style="font-weight:700">${cumTxt}</td></tr>`;
-  });
-  html += '</tbody>';
+  // Build table header: label + 12 months + 累計/年計 + 着地見込み
+  let html = `<table class="biz-tbl" style="font-size:.72rem"><thead><tr>
+    <th style="text-align:left;min-width:130px;position:sticky;left:0;background:var(--bg3);z-index:1">項目</th>
+    ${months.map((m,i)=>`<th${i>fi?' style="opacity:.5"':''}>${m}</th>`).join('')}
+    <th class="cum-col">累計/年計</th>
+    <th>着地見込み</th>
+  </tr></thead><tbody>`;
+
+  // Helper: build a section (metric block)
+  const section = (name, dataObj, fc, opts={}) => {
+    const {isCogs, isGross, isOP, isSales} = opts;
+    const actual = dataObj.actual || [];
+    const plan   = dataObj.plan   || [];
+    const prev   = dataObj.prev   || [];
+    const salesActual = D.sales.actual || [];
+    const salesPlan   = D.sales.plan   || [];
+    const salesPrev   = D.sales.prev   || [];
+
+    // Cumulative values (up to fi)
+    const cumA = actual.slice(0,fi+1).reduce((a,v)=>a+v,0);
+    const cumP = plan.slice(0,fi+1).reduce((a,v)=>a+v,0);
+    const cumV = prev.slice(0,fi+1).reduce((a,v)=>a+v,0);
+    const annualPlan = plan.reduce((a,v)=>a+v,0);
+    const annualPrev = prev.reduce((a,v)=>a+v,0);
+    const landing = fc.reduce((a,v)=>a+v,0);
+
+    // Cumulative sales for rate calc
+    const cumSalesA = salesActual.slice(0,fi+1).reduce((a,v)=>a+v,0);
+    const cumSalesP = salesPlan.slice(0,fi+1).reduce((a,v)=>a+v,0);
+    const cumSalesV = salesPrev.slice(0,fi+1).reduce((a,v)=>a+v,0);
+
+    let rows = '';
+    // Section header
+    rows += `<tr class="metric-header"><td colspan="15" style="font-size:.78rem">${name}</td></tr>`;
+
+    // 本年実績
+    rows += `<tr class="actual"><td style="padding-left:14px">&nbsp;本年実績</td>
+      ${months.map((m,mi)=>{
+        const v=actual[mi]||0;
+        const display=mi<=fi&&v!==0?Math.round(v).toLocaleString():'<span style="color:var(--muted)">—</span>';
+        return `<td>${display}</td>`;
+      }).join('')}
+      <td class="cum-col" style="font-weight:700">${Math.round(cumA).toLocaleString()}</td>
+      <td style="color:#a78bfa;font-weight:700">${Math.round(landing).toLocaleString()}</td>
+    </tr>`;
+
+    // 本年見込み
+    rows += `<tr class="forecast"><td style="padding-left:14px">&nbsp;本年見込み</td>
+      ${months.map((m,mi)=>{
+        const v=fc[mi]||0;
+        const isPast=mi<=fi;
+        const display=Math.round(v).toLocaleString();
+        return `<td style="color:${isPast?'var(--text)':'#a78bfa'}">${display}</td>`;
+      }).join('')}
+      <td class="cum-col" style="font-weight:700;color:#a78bfa">${Math.round(landing).toLocaleString()}</td>
+      <td style="color:var(--muted)">—</td>
+    </tr>`;
+
+    // 前年実績
+    rows += `<tr class="prev"><td style="padding-left:14px">&nbsp;前年実績</td>
+      ${months.map((m,mi)=>{ const v=prev[mi]||0; return `<td>${v?Math.round(v).toLocaleString():'<span style="color:var(--muted)">—</span>'}</td>`; }).join('')}
+      <td class="cum-col" style="font-weight:700">${Math.round(annualPrev).toLocaleString()}</td>
+      <td style="color:var(--muted);font-size:.68rem">年計</td>
+    </tr>`;
+
+    // 計画
+    rows += `<tr class="plan"><td style="padding-left:14px">&nbsp;計画</td>
+      ${months.map((m,mi)=>{ const v=plan[mi]||0; return `<td>${v?Math.round(v).toLocaleString():'<span style="color:var(--muted)">—</span>'}</td>`; }).join('')}
+      <td class="cum-col" style="font-weight:700">${Math.round(annualPlan).toLocaleString()}</td>
+      <td style="color:var(--muted);font-size:.68rem">年計</td>
+    </tr>`;
+
+    if(isCogs){
+      // 原価率行
+      rows += `<tr style="font-size:.72rem"><td style="padding-left:14px;color:var(--muted)">&nbsp;本年原価率</td>
+        ${months.map((m,mi)=>{ const a=actual[mi]||0,s=salesActual[mi]||0; return `<td>${mi<=fi&&s?fmtRatePct(a/s*100):'<span style="color:var(--muted)">—</span>'}</td>`; }).join('')}
+        <td class="cum-col">${cumSalesA?fmtRatePct(cumA/cumSalesA*100):'—'}</td><td>—</td></tr>`;
+      rows += `<tr style="font-size:.72rem"><td style="padding-left:14px;color:var(--muted)">&nbsp;前年原価率</td>
+        ${months.map((m,mi)=>{ const v=prev[mi]||0,s=salesPrev[mi]||0; return `<td>${s?fmtRatePct(v/s*100):'<span style="color:var(--muted)">—</span>'}</td>`; }).join('')}
+        <td class="cum-col">${cumSalesV?fmtRatePct(cumV/cumSalesV*100):'—'}</td><td>—</td></tr>`;
+      rows += `<tr style="font-size:.72rem"><td style="padding-left:14px;color:var(--muted)">&nbsp;計画原価率</td>
+        ${months.map((m,mi)=>{ const v=plan[mi]||0,s=salesPlan[mi]||0; return `<td>${s?fmtRatePct(v/s*100):'<span style="color:var(--muted)">—</span>'}</td>`; }).join('')}
+        <td class="cum-col">${cumSalesP?fmtRatePct(annualPlan/salesPlan.reduce((a,v)=>a+v,0)*100):'—'}</td><td>—</td></tr>`;
+    } else if(isOP){
+      // 利益率行
+      rows += `<tr style="font-size:.72rem"><td style="padding-left:14px;color:var(--muted)">&nbsp;本年利益率</td>
+        ${months.map((m,mi)=>{ const a=actual[mi]||0,s=salesActual[mi]||0; return `<td>${mi<=fi&&s?fmtRatePct(a/s*100):'<span style="color:var(--muted)">—</span>'}</td>`; }).join('')}
+        <td class="cum-col">${cumSalesA?fmtRatePct(cumA/cumSalesA*100):'—'}</td><td>—</td></tr>`;
+      rows += `<tr style="font-size:.72rem"><td style="padding-left:14px;color:var(--muted)">&nbsp;前年利益率</td>
+        ${months.map((m,mi)=>{ const v=prev[mi]||0,s=salesPrev[mi]||0; return `<td>${s?fmtRatePct(v/s*100):'<span style="color:var(--muted)">—</span>'}</td>`; }).join('')}
+        <td class="cum-col">${cumSalesV?fmtRatePct(cumV/cumSalesV*100):'—'}</td><td>—</td></tr>`;
+      rows += `<tr style="font-size:.72rem"><td style="padding-left:14px;color:var(--muted)">&nbsp;計画利益率</td>
+        ${months.map((m,mi)=>{ const v=plan[mi]||0,s=salesPlan[mi]||0; return `<td>${s?fmtRatePct(v/s*100):'<span style="color:var(--muted)">—</span>'}</td>`; }).join('')}
+        <td class="cum-col">${cumSalesP?fmtRatePct(annualPlan/salesPlan.reduce((a,v)=>a+v,0)*100):'—'}</td><td>—</td></tr>`;
+    } else if(!isGross){
+      // 前年比/差異/計画比/差異
+      rows += `<tr style="font-size:.72rem"><td style="padding-left:14px;color:#fb923c">&nbsp;前年比</td>
+        ${months.map((m,mi)=>{ return `<td>${mi<=fi?fmtRatio(actual[mi]||0,prev[mi]||0):'<span style="color:var(--muted)">—</span>'}</td>`; }).join('')}
+        <td class="cum-col">${fmtRatio(cumA,cumV)}</td><td>—</td></tr>`;
+      rows += `<tr style="font-size:.72rem"><td style="padding-left:14px;color:var(--subtle)">&nbsp;前年差異</td>
+        ${months.map((m,mi)=>{ return `<td>${mi<=fi?fmtDiff(actual[mi]||0,prev[mi]||0):'<span style="color:var(--muted)">—</span>'}</td>`; }).join('')}
+        <td class="cum-col">${fmtDiff(cumA,cumV)}</td><td>—</td></tr>`;
+      rows += `<tr style="font-size:.72rem"><td style="padding-left:14px;color:var(--accent)">&nbsp;計画比</td>
+        ${months.map((m,mi)=>{ return `<td>${mi<=fi?fmtRatio(actual[mi]||0,plan[mi]||0):'<span style="color:var(--muted)">—</span>'}</td>`; }).join('')}
+        <td class="cum-col">${fmtRatio(cumA,cumP)}</td><td>—</td></tr>`;
+      rows += `<tr style="font-size:.72rem"><td style="padding-left:14px;color:var(--subtle)">&nbsp;計画差異</td>
+        ${months.map((m,mi)=>{ return `<td>${mi<=fi?fmtDiff(actual[mi]||0,plan[mi]||0):'<span style="color:var(--muted)">—</span>'}</td>`; }).join('')}
+        <td class="cum-col">${fmtDiff(cumA,cumP)}</td><td>—</td></tr>`;
+    }
+
+    return rows;
+  };
+
+  html += section('店消', D.tenso||{actual:Array(12).fill(0),plan:Array(12).fill(0),prev:Array(12).fill(0)}, fcTenso||Array(12).fill(0));
+  html += section('売上', D.sales, fcSales, {isSales:true});
+  html += section('原価', D.cogs,  fcCogs,  {isCogs:true});
+  html += section('粗利', D.gross, fcGross, {isGross:true});
+  html += section('販管費', D.sg,  fcSG);
+  html += section('営業利益', D.op, fcOP,   {isOP:true});
+
+  html += '</tbody></table>';
   document.getElementById('plTable').innerHTML = html;
 }
 
