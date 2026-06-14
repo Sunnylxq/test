@@ -367,12 +367,12 @@ body{font-family:'UD デジタル 教科書体 NK','UDDigitalKyokasho-NK','Hirag
           <canvas id="chartOP" height="180"></canvas>
         </div>
         <div class="card">
-          <div class="card-title" id="chartPieMonthTitle">📊 事業別売上構成（最新月）</div>
-          <div style="position:relative;height:180px"><canvas id="chartPieMonth"></canvas></div>
+          <div class="card-title" id="chartPieMonthTitle">🥧 事業別売上構成（最新月）</div>
+          <canvas id="chartPieMonth" height="180"></canvas>
         </div>
         <div class="card">
-          <div class="card-title">📊 事業別売上構成（累計）</div>
-          <div style="position:relative;height:180px"><canvas id="chartPie"></canvas></div>
+          <div class="card-title">🥧 事業別売上構成（累計）</div>
+          <canvas id="chartPie" height="180"></canvas>
         </div>
       </div>
 
@@ -894,33 +894,26 @@ function renderDashboard(){
 
   // 利益率チャート
 
-  // 事業別売上構成（横棒グラフ）
+  // 事業別売上構成（ドーナツグラフ）
   const bizSums = D.businesses.map(b=>({name:b.name,sum:b.monthly.slice(0,fi+1).reduce((a,v)=>a+v,0)}));
   const total_sum = bizSums.reduce((a,b)=>a+b.sum,0);
-  const barOpts = (total) => ({
-    indexAxis:'y', responsive:true, maintainAspectRatio:false,
-    plugins:{
-      legend:{display:false},
-      tooltip:{callbacks:{label:ctx=>`${fmtM(ctx.raw)}千円 (${(ctx.raw/total*100).toFixed(1)}%)`}}
-    },
-    scales:{
-      x:{ticks:{color:'#64748b',font:{size:9},callback:v=>fmtM(v)},grid:{color:'rgba(0,0,0,.06)'},border:{display:false}},
-      y:{ticks:{color:'#475569',font:{size:9}},grid:{display:false},border:{display:false}}
-    }
-  });
-  mkChart('chartPie',{type:'bar',data:{
+  const pieOpts = (total) => ({responsive:true,plugins:{
+    legend:{position:'right',labels:{color:'#475569',font:{size:9},boxWidth:10,padding:6}},
+    tooltip:{callbacks:{label:ctx=>`${fmtM(ctx.raw)}千円 (${(ctx.raw/total*100).toFixed(1)}%)`}}
+  }});
+  mkChart('chartPie',{type:'doughnut',data:{
     labels:bizSums.map(b=>b.name),
-    datasets:[{data:bizSums.map(b=>Math.round(b.sum)),backgroundColor:COLORS.map(c=>c+'bb'),borderRadius:4,borderSkipped:false}]
-  },options:barOpts(total_sum)});
+    datasets:[{data:bizSums.map(b=>Math.round(b.sum)),backgroundColor:COLORS.map(c=>c+'cc'),borderColor:'#ffffff',borderWidth:2}]
+  },options:pieOpts(total_sum)});
 
   // 最新月
   const bizMonth = D.businesses.map(b=>({name:b.name,val:Math.max(0,b.monthly[fi]||0)}));
   const total_month = bizMonth.reduce((a,b)=>a+b.val,0);
-  document.getElementById('chartPieMonthTitle').textContent = `📊 事業別売上構成（${D.months[fi]}）`;
-  mkChart('chartPieMonth',{type:'bar',data:{
+  document.getElementById('chartPieMonthTitle').textContent = `🥧 事業別売上構成（${D.months[fi]}）`;
+  mkChart('chartPieMonth',{type:'doughnut',data:{
     labels:bizMonth.map(b=>b.name),
-    datasets:[{data:bizMonth.map(b=>Math.round(b.val)),backgroundColor:COLORS.map(c=>c+'bb'),borderRadius:4,borderSkipped:false}]
-  },options:barOpts(total_month)});
+    datasets:[{data:bizMonth.map(b=>Math.round(b.val)),backgroundColor:COLORS.map(c=>c+'cc'),borderColor:'#ffffff',borderWidth:2}]
+  },options:pieOpts(total_month)});
 
   // 事業別 年間計画進捗率（3指標）
   const timeElapsed = (fi + 1) / 12 * 100; // 経過時間 %
