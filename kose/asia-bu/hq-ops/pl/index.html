@@ -8,9 +8,9 @@
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 :root{
-  --bg:#0f1117;--bg2:#1a1d2e;--bg3:#242840;--card:#1e2235;--border:#2e3250;
-  --accent:#6366f1;--green:#10b981;--red:#ef4444;--yellow:#f59e0b;--blue:#3b82f6;--cyan:#06b6d4;
-  --text:#e2e8f0;--muted:#64748b;--subtle:#94a3b8;
+  --bg:#f8fafc;--bg2:#ffffff;--bg3:#f1f5f9;--card:#ffffff;--border:#e2e8f0;
+  --accent:#6366f1;--green:#059669;--red:#dc2626;--yellow:#d97706;--blue:#2563eb;--cyan:#0891b2;
+  --text:#0f172a;--muted:#64748b;--subtle:#475569;
 }
 body{font-family:'UD デジタル 教科書体 NK','UDDigitalKyokasho-NK','Hiragino Sans','Yu Gothic',system-ui,sans-serif;background:var(--bg);color:var(--text);min-height:100vh}
 ::-webkit-scrollbar{width:5px;height:5px}
@@ -23,7 +23,7 @@ body{font-family:'UD デジタル 教科書体 NK','UDDigitalKyokasho-NK','Hirag
   background:radial-gradient(ellipse at 30% 50%,rgba(99,102,241,.15) 0%,transparent 60%);
 }
 #loginScreen.visible{display:flex;}
-.login-box{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:40px;width:100%;max-width:400px;box-shadow:0 20px 60px rgba(0,0,0,.6)}
+.login-box{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:40px;width:100%;max-width:400px;box-shadow:0 20px 60px rgba(0,0,0,.1)}
 .login-logo{text-align:center;margin-bottom:24px}
 .login-logo .icon{font-size:3rem;margin-bottom:8px}
 .login-logo h1{font-size:1.3rem;font-weight:700}
@@ -55,7 +55,7 @@ body{font-family:'UD デジタル 教科書体 NK','UDDigitalKyokasho-NK','Hirag
 .um-action-btn.danger:hover{border-color:var(--red);color:var(--red)}
 
 /* ===== MODAL ===== */
-.modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:200;align-items:center;justify-content:center}
+.modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:200;align-items:center;justify-content:center}
 .modal-overlay.open{display:flex}
 .modal-box{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:28px;width:100%;max-width:420px;box-shadow:0 20px 60px rgba(0,0,0,.6)}
 .modal-title{font-size:1rem;font-weight:700;margin-bottom:20px;display:flex;align-items:center;gap:8px}
@@ -101,7 +101,11 @@ body{font-family:'UD デジタル 教科書体 NK','UDDigitalKyokasho-NK','Hirag
 .biz-tbl td.editing{padding:0!important}
 .biz-tbl td.editing input{width:100%;min-width:60px;background:rgba(99,102,241,.18);border:1.5px solid var(--accent);border-radius:4px;padding:2px 4px;color:var(--text);font-size:.68rem;text-align:right;outline:none}
 .biz-tbl tr.forecast td{color:#a78bfa}
+.biz-tbl tr.fc-row td{color:#a78bfa;font-style:italic}
 .biz-tbl td.fc-manual{outline:1px dashed #fbbf2488}
+.biz-tbl td.diff-pos{color:var(--green)!important}
+.biz-tbl td.diff-neg{color:var(--red)!important}
+.biz-tbl td.rate-muted{color:var(--muted)!important}
 .forecast-section{margin-top:16px}
 .analysis-section{margin-top:16px}
 .analysis-tabs{display:flex;flex-wrap:wrap;gap:4px;margin-bottom:10px}
