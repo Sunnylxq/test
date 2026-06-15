@@ -1,0 +1,770 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>出荷実績分析システム</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+:root {
+  --bg: #f0f2f5;
+  --card: #ffffff;
+  --primary: #1a56db;
+  --primary-light: #e8f0fe;
+  --accent: #f59e0b;
+  --green: #10b981;
+  --red: #ef4444;
+  --text: #111827;
+  --text-sub: #6b7280;
+  --border: #e5e7eb;
+  --sidebar-w: 220px;
+  --header-h: 60px;
+}
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: "Hiragino Kaku Gothic ProN", "Noto Sans JP", sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
+
+/* Layout */
+#app { display: flex; min-height: 100vh; }
+#sidebar {
+  width: var(--sidebar-w); background: #1e293b; color: #cbd5e1;
+  display: flex; flex-direction: column; position: fixed; top: 0; bottom: 0; left: 0; z-index: 100;
+}
+#sidebar .logo { padding: 18px 20px; font-size: 15px; font-weight: 700; color: #fff; border-bottom: 1px solid #334155; }
+#sidebar .logo span { display: block; font-size: 11px; font-weight: 400; color: #94a3b8; margin-top: 3px; }
+#store-switcher { padding: 12px 12px 8px; border-bottom: 1px solid #334155; }
+#store-switcher label { font-size: 11px; color: #64748b; display: block; margin-bottom: 6px; }
+.store-btn { display: block; width: 100%; padding: 8px 12px; border-radius: 6px; border: none; cursor: pointer;
+  font-size: 13px; font-weight: 600; margin-bottom: 4px; transition: all .15s; text-align: left; }
+.store-btn.wechat { background: #1a4d3a; color: #6ee7b7; }
+.store-btn.novarca { background: #1e3a5f; color: #93c5fd; }
+.store-btn.active, .store-btn:hover { filter: brightness(1.4); }
+nav { flex: 1; padding: 12px 0; overflow-y: auto; }
+nav a { display: flex; align-items: center; gap: 10px; padding: 10px 20px; font-size: 13px;
+  color: #94a3b8; text-decoration: none; transition: all .15s; border-left: 3px solid transparent; }
+nav a:hover, nav a.active { background: #334155; color: #fff; border-left-color: var(--primary); }
+nav a .icon { font-size: 16px; width: 20px; text-align: center; }
+#main { margin-left: var(--sidebar-w); flex: 1; display: flex; flex-direction: column; min-height: 100vh; }
+header { height: var(--header-h); background: var(--card); border-bottom: 1px solid var(--border);
+  display: flex; align-items: center; justify-content: space-between; padding: 0 24px; position: sticky; top: 0; z-index: 50; }
+header h1 { font-size: 16px; font-weight: 700; }
+.store-badge { padding: 4px 12px; border-radius: 20px; font-size: 12px; font-weight: 700; }
+.store-badge.wechat { background: #d1fae5; color: #065f46; }
+.store-badge.novarca { background: #dbeafe; color: #1e40af; }
+#content { padding: 24px; flex: 1; }
+
+/* Cards */
+.section-title { font-size: 18px; font-weight: 700; margin-bottom: 16px; display: flex; align-items: center; gap: 8px; }
+.section-title::before { content: ''; display: block; width: 4px; height: 18px; background: var(--primary); border-radius: 2px; }
+.card { background: var(--card); border-radius: 12px; padding: 20px; box-shadow: 0 1px 3px rgba(0,0,0,.08); }
+.card + .card { margin-top: 0; }
+
+/* Dashboard KPIs */
+.kpi-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 16px; margin-bottom: 24px; }
+.kpi { background: var(--card); border-radius: 12px; padding: 20px; box-shadow: 0 1px 3px rgba(0,0,0,.08); }
+.kpi .label { font-size: 12px; color: var(--text-sub); margin-bottom: 6px; }
+.kpi .value { font-size: 24px; font-weight: 800; color: var(--text); }
+.kpi .sub { font-size: 12px; margin-top: 4px; }
+.kpi .sub.up { color: var(--green); }
+.kpi .sub.down { color: var(--red); }
+.kpi .sub.neutral { color: var(--text-sub); }
+
+/* Charts */
+.chart-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 24px; }
+.chart-box { background: var(--card); border-radius: 12px; padding: 20px; box-shadow: 0 1px 3px rgba(0,0,0,.08); }
+.chart-box h3 { font-size: 14px; font-weight: 700; margin-bottom: 16px; color: var(--text-sub); }
+.chart-box canvas { max-height: 280px; }
+
+/* Tables */
+.table-wrap { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; font-size: 13px; }
+th { background: #f8fafc; color: var(--text-sub); font-weight: 600; padding: 10px 12px; text-align: left; border-bottom: 2px solid var(--border); white-space: nowrap; }
+td { padding: 10px 12px; border-bottom: 1px solid var(--border); }
+tr:hover td { background: var(--primary-light); }
+.rank-badge { display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 24px; border-radius: 50%; font-weight: 700; font-size: 12px; }
+.rank-1 { background: #fef08a; color: #78350f; }
+.rank-2 { background: #e5e7eb; color: #374151; }
+.rank-3 { background: #fde68a; color: #92400e; }
+.rank-other { background: #f3f4f6; color: #6b7280; }
+.change-up { color: var(--green); font-weight: 700; }
+.change-down { color: var(--red); font-weight: 700; }
+.bar-mini { display: inline-block; height: 6px; border-radius: 3px; background: var(--primary); margin-left: 8px; vertical-align: middle; min-width: 2px; }
+
+/* Month selector */
+.month-select-row { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; flex-wrap: wrap; }
+.month-select-row label { font-size: 13px; color: var(--text-sub); }
+select, input[type=text] { padding: 7px 12px; border: 1px solid var(--border); border-radius: 8px; font-size: 13px; background: var(--card); }
+select:focus, input:focus { outline: none; border-color: var(--primary); }
+button.btn { padding: 7px 16px; border-radius: 8px; border: none; cursor: pointer; font-size: 13px; font-weight: 600; transition: all .15s; }
+button.btn-primary { background: var(--primary); color: #fff; }
+button.btn-primary:hover { background: #1e40af; }
+button.btn-sm { padding: 4px 10px; font-size: 12px; }
+button.btn-danger { background: #fee2e2; color: var(--red); }
+
+/* Key products editor */
+.tag-list { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
+.tag { display: flex; align-items: center; gap: 6px; background: var(--primary-light); color: var(--primary);
+  padding: 4px 10px; border-radius: 20px; font-size: 13px; }
+.tag button { background: none; border: none; cursor: pointer; color: var(--primary); font-size: 14px; line-height: 1; padding: 0; }
+
+/* Auth panel */
+.auth-row { display: flex; align-items: center; gap: 8px; margin-bottom: 16px; }
+.auth-row input { width: 180px; }
+
+/* Tabs */
+.tabs { display: flex; gap: 4px; border-bottom: 2px solid var(--border); margin-bottom: 20px; }
+.tab { padding: 8px 16px; border: none; background: none; cursor: pointer; font-size: 14px; color: var(--text-sub); border-bottom: 2px solid transparent; margin-bottom: -2px; }
+.tab.active { color: var(--primary); border-bottom-color: var(--primary); font-weight: 700; }
+
+/* Loading */
+.loading { text-align: center; padding: 60px 0; color: var(--text-sub); font-size: 15px; }
+.loading::after { content: ''; display: inline-block; width: 20px; height: 20px; border: 3px solid var(--border);
+  border-top-color: var(--primary); border-radius: 50%; animation: spin .8s linear infinite; margin-left: 10px; vertical-align: middle; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* Upload area */
+.upload-area { border: 2px dashed var(--border); border-radius: 12px; padding: 32px; text-align: center; color: var(--text-sub); margin-bottom: 16px; }
+.upload-area:hover { border-color: var(--primary); background: var(--primary-light); }
+
+/* Responsive */
+@media (max-width: 768px) {
+  #sidebar { transform: translateX(-100%); }
+  #main { margin-left: 0; }
+  .chart-grid { grid-template-columns: 1fr; }
+  .kpi-grid { grid-template-columns: 1fr 1fr; }
+}
+
+/* Page sections */
+.page { display: none; }
+.page.active { display: block; }
+
+/* Amount formatting */
+.amount { font-variant-numeric: tabular-nums; }
+</style>
+</head>
+<body>
+<div id="app">
+  <aside id="sidebar">
+    <div class="logo">出荷実績分析<span>Analytics Dashboard</span></div>
+    <div id="store-switcher">
+      <label>店舗選択</label>
+      <button class="store-btn wechat active" onclick="switchStore('wechat')">🟢 店舗A (WeChat)</button>
+      <button class="store-btn novarca" onclick="switchStore('novarca')">🔵 店舗B (NOVARCA)</button>
+    </div>
+    <nav>
+      <a href="#" class="active" onclick="showPage('dashboard',this)"><span class="icon">📊</span>ダッシュボード</a>
+      <a href="#" onclick="showPage('brand',this)"><span class="icon">🏷️</span>ブランド分析</a>
+      <a href="#" onclick="showPage('product',this)"><span class="icon">📦</span>商品分析</a>
+      <a href="#" onclick="showPage('key',this)"><span class="icon">⭐</span>重点商品分析</a>
+      <a href="#" onclick="showPage('upload',this)"><span class="icon">📤</span>データ更新</a>
+    </nav>
+  </aside>
+
+  <div id="main">
+    <header>
+      <h1 id="page-title">ダッシュボード</h1>
+      <div style="display:flex;align-items:center;gap:12px;">
+        <span id="store-badge" class="store-badge wechat">店舗A / WeChat</span>
+        <span id="month-display" style="font-size:13px;color:var(--text-sub)"></span>
+      </div>
+    </header>
+
+    <div id="content">
+      <!-- Dashboard -->
+      <div id="page-dashboard" class="page active">
+        <div id="kpi-row" class="kpi-grid"></div>
+        <div class="chart-grid">
+          <div class="chart-box">
+            <h3>月別出荷金額推移</h3>
+            <canvas id="chart-monthly"></canvas>
+          </div>
+          <div class="chart-box">
+            <h3>今月ブランド別構成比</h3>
+            <canvas id="chart-pie"></canvas>
+          </div>
+        </div>
+        <div class="chart-box" style="margin-bottom:24px;">
+          <h3>累計月別出荷推移（全期間）</h3>
+          <canvas id="chart-cumulative" style="max-height:200px;"></canvas>
+        </div>
+      </div>
+
+      <!-- Brand Analysis -->
+      <div id="page-brand" class="page">
+        <div class="tabs">
+          <button class="tab active" onclick="switchTab('brand','monthly',this)">月別ブランドランキング</button>
+          <button class="tab" onclick="switchTab('brand','cumulative',this)">累計ブランドランキング</button>
+          <button class="tab" onclick="switchTab('brand','trend',this)">ブランド趨勢</button>
+        </div>
+        <div id="brand-monthly" class="brand-tab">
+          <div class="month-select-row">
+            <label>対象月：</label>
+            <select id="brand-month-sel" onchange="renderBrandMonthly()"></select>
+          </div>
+          <div class="card table-wrap" id="brand-monthly-table"></div>
+        </div>
+        <div id="brand-cumulative" class="brand-tab" style="display:none;">
+          <div class="card table-wrap" id="brand-cumulative-table"></div>
+        </div>
+        <div id="brand-trend" class="brand-tab" style="display:none;">
+          <div class="card">
+            <h3 style="font-size:14px;font-weight:700;margin-bottom:16px;color:var(--text-sub);">ブランド別月次推移（上位10ブランド）</h3>
+            <canvas id="chart-brand-trend" style="max-height:360px;"></canvas>
+          </div>
+        </div>
+      </div>
+
+      <!-- Product Analysis -->
+      <div id="page-product" class="page">
+        <div class="tabs">
+          <button class="tab active" onclick="switchTab('product','monthly',this)">月別TOP10</button>
+          <button class="tab" onclick="switchTab('product','cumulative',this)">累計TOP10</button>
+        </div>
+        <div id="product-monthly" class="product-tab">
+          <div class="month-select-row">
+            <label>対象月：</label>
+            <select id="product-month-sel" onchange="renderProductMonthly()"></select>
+          </div>
+          <div class="card table-wrap" id="product-monthly-table"></div>
+        </div>
+        <div id="product-cumulative" class="product-tab" style="display:none;">
+          <div class="card table-wrap" id="product-cumulative-table"></div>
+        </div>
+      </div>
+
+      <!-- Key Products -->
+      <div id="page-key" class="page">
+        <div class="auth-row">
+          <label style="font-size:13px;">編集パスワード：</label>
+          <input type="password" id="edit-password" placeholder="パスワード" style="width:160px;">
+          <button class="btn btn-primary" onclick="saveKeyProducts()">設定を保存</button>
+        </div>
+        <div class="card" style="margin-bottom:16px;">
+          <div class="section-title" style="font-size:14px;margin-bottom:12px;">重点商品キーワード</div>
+          <div id="key-tags" class="tag-list"></div>
+          <div style="display:flex;gap:8px;margin-top:8px;">
+            <input type="text" id="key-input" placeholder="キーワード追加（例：雪肌精）" style="flex:1;" onkeydown="if(event.key==='Enter')addKeyTag()">
+            <button class="btn btn-primary" onclick="addKeyTag()">追加</button>
+          </div>
+        </div>
+        <div id="key-charts"></div>
+      </div>
+
+      <!-- Upload -->
+      <div id="page-upload" class="page">
+        <div class="card">
+          <div class="section-title">データ更新</div>
+          <p style="font-size:13px;color:var(--text-sub);margin-bottom:20px;">新しいExcelファイルをアップロードすると、自動的に分析結果が更新されます。</p>
+          <div class="auth-row">
+            <label style="font-size:13px;">編集パスワード：</label>
+            <input type="password" id="upload-password" placeholder="パスワード" style="width:160px;">
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+            <div>
+              <p style="font-weight:700;margin-bottom:12px;">店舗A (WeChat)</p>
+              <div class="upload-area" id="drop-wechat" ondrop="handleDrop(event,'wechat')" ondragover="event.preventDefault()">
+                📂 ここにドロップまたはクリック
+                <input type="file" accept=".xlsx" style="display:none;" id="file-wechat" onchange="handleFile(event,'wechat')">
+              </div>
+              <div style="display:flex;gap:8px;align-items:center;">
+                <select id="year-wechat" style="flex:1;">
+                  <option value="2025">2025年</option>
+                  <option value="2026" selected>2026年</option>
+                  <option value="2027">2027年</option>
+                </select>
+                <button class="btn btn-primary" onclick="uploadFile('wechat')">アップロード</button>
+              </div>
+            </div>
+            <div>
+              <p style="font-weight:700;margin-bottom:12px;">店舗B (NOVARCA)</p>
+              <div class="upload-area" id="drop-novarca" ondrop="handleDrop(event,'novarca')" ondragover="event.preventDefault()">
+                📂 ここにドロップまたはクリック
+                <input type="file" accept=".xlsx" style="display:none;" id="file-novarca" onchange="handleFile(event,'novarca')">
+              </div>
+              <div style="display:flex;gap:8px;align-items:center;">
+                <select id="year-novarca" style="flex:1;">
+                  <option value="2025">2025年</option>
+                  <option value="2026" selected>2026年</option>
+                  <option value="2027">2027年</option>
+                </select>
+                <button class="btn btn-primary" onclick="uploadFile('novarca')">アップロード</button>
+              </div>
+            </div>
+          </div>
+          <div id="upload-status" style="margin-top:12px;font-size:13px;"></div>
+        </div>
+      </div>
+    </div><!-- /content -->
+  </div><!-- /main -->
+</div><!-- /app -->
+
+<script>
+// ===================== State =====================
+let currentStore = 'wechat';
+let analyticsData = { wechat: null, novarca: null };
+let keyProductData = { wechat: null, novarca: null };
+let keyTags = { wechat: [], novarca: [] };
+let charts = {};
+
+const STORE_LABELS = { wechat: '店舗A / WeChat', novarca: '店舗B / NOVARCA' };
+const PALETTE = ['#3b82f6','#f59e0b','#10b981','#ef4444','#8b5cf6','#ec4899','#06b6d4','#84cc16','#f97316','#6366f1'];
+
+// ===================== Init =====================
+async function init() {
+  await loadAnalytics(currentStore);
+  await loadKeyProducts(currentStore);
+  renderCurrentPage();
+}
+
+// ===================== Store Switch =====================
+function switchStore(store) {
+  if (store === currentStore) return;
+  currentStore = store;
+  document.querySelectorAll('.store-btn').forEach(b => b.classList.toggle('active', b.classList.contains(store)));
+  document.getElementById('store-badge').className = `store-badge ${store}`;
+  document.getElementById('store-badge').textContent = STORE_LABELS[store];
+  destroyCharts();
+  renderCurrentPage();
+}
+
+async function ensureData(store) {
+  if (!analyticsData[store]) {
+    await loadAnalytics(store);
+    await loadKeyProducts(store);
+  }
+}
+
+async function loadAnalytics(store) {
+  const res = await fetch(`/api/analytics/${store}`);
+  analyticsData[store] = await res.json();
+  const d = analyticsData[store].dashboard;
+  const ym = String(d.current_yyyymm);
+  document.getElementById('month-display').textContent = `${ym.slice(0,4)}年${parseInt(ym.slice(4))}月`;
+}
+
+async function loadKeyProducts(store) {
+  const res = await fetch(`/api/key_products/${store}`);
+  const data = await res.json();
+  keyProductData[store] = data;
+  keyTags[store] = [...data.keywords];
+}
+
+// ===================== Page Navigation =====================
+let currentPage = 'dashboard';
+function showPage(page, el) {
+  if (el) {
+    document.querySelectorAll('nav a').forEach(a => a.classList.remove('active'));
+    el.classList.add('active');
+  }
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.getElementById(`page-${page}`).classList.add('active');
+  const titles = { dashboard:'ダッシュボード', brand:'ブランド分析', product:'商品分析', key:'重点商品分析', upload:'データ更新' };
+  document.getElementById('page-title').textContent = titles[page];
+  currentPage = page;
+  destroyCharts();
+  renderCurrentPage();
+  return false;
+}
+
+function renderCurrentPage() {
+  ensureData(currentStore).then(() => {
+    if (currentPage === 'dashboard') renderDashboard();
+    else if (currentPage === 'brand') renderBrand();
+    else if (currentPage === 'product') renderProduct();
+    else if (currentPage === 'key') renderKey();
+  });
+}
+
+function switchTab(page, tab, el) {
+  document.querySelectorAll(`#page-${page} .tab`).forEach(t => t.classList.remove('active'));
+  el.classList.add('active');
+  const suffix = page === 'brand' ? '-tab' : '-tab';
+  document.querySelectorAll(`.${page}-tab`).forEach(d => d.style.display = 'none');
+  document.getElementById(`${page}-${tab}`).style.display = '';
+  destroyCharts();
+  if (page === 'brand') {
+    if (tab === 'monthly') renderBrandMonthly();
+    else if (tab === 'cumulative') renderBrandCumulative();
+    else if (tab === 'trend') renderBrandTrend();
+  } else if (page === 'product') {
+    if (tab === 'monthly') renderProductMonthly();
+    else if (tab === 'cumulative') renderProductCumulative();
+  }
+}
+
+// ===================== Helpers =====================
+function fmt(n) {
+  if (n == null || isNaN(n)) return '—';
+  return '¥' + Math.round(n).toLocaleString();
+}
+function fmtQty(n) { return Math.round(n).toLocaleString(); }
+function fmtPct(n) { if (n == null) return '—'; return (n >= 0 ? '+' : '') + n.toFixed(1) + '%'; }
+function ymLabel(ym) { const s = String(ym); return `${s.slice(0,4)}/${s.slice(4)}`; }
+function rankBadge(r) {
+  const cls = r === 1 ? 'rank-1' : r === 2 ? 'rank-2' : r === 3 ? 'rank-3' : 'rank-other';
+  return `<span class="rank-badge ${cls}">${r}</span>`;
+}
+function destroyCharts() {
+  Object.values(charts).forEach(c => { try { c.destroy(); } catch(e){} });
+  charts = {};
+}
+function makeChart(id, config) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  if (charts[id]) { charts[id].destroy(); }
+  charts[id] = new Chart(el, config);
+}
+
+// ===================== Dashboard =====================
+function renderDashboard() {
+  const data = analyticsData[currentStore];
+  if (!data || !data.dashboard) return;
+  const d = data.dashboard;
+
+  // KPIs
+  const kpis = [
+    { label: '本月出荷金額', value: fmt(d.this_month_amount), sub: d.yoy != null ? `前年同月比 ${fmtPct(d.yoy)}` : '前年データなし', cls: d.yoy != null ? (d.yoy >= 0 ? 'up' : 'down') : 'neutral' },
+    { label: '累計出荷金額', value: fmt(d.cumulative_amount), sub: '当年度累計', cls: 'neutral' },
+    { label: 'ブランド数', value: d.brand_count, sub: '取扱いブランド', cls: 'neutral' },
+    { label: 'SKU数', value: d.sku_count.toLocaleString(), sub: '取扱い商品数', cls: 'neutral' },
+    { label: '前年同月比', value: d.yoy != null ? fmtPct(d.yoy) : '—', sub: '対前年', cls: d.yoy != null ? (d.yoy >= 0 ? 'up' : 'down') : 'neutral' },
+    { label: '前月比', value: d.mom != null ? fmtPct(d.mom) : '—', sub: '対前月', cls: d.mom != null ? (d.mom >= 0 ? 'up' : 'down') : 'neutral' },
+  ];
+  document.getElementById('kpi-row').innerHTML = kpis.map(k => `
+    <div class="kpi">
+      <div class="label">${k.label}</div>
+      <div class="value">${k.value}</div>
+      <div class="sub ${k.cls}">${k.sub}</div>
+    </div>`).join('');
+
+  // Monthly bar chart
+  const months = data.months;
+  const summary = data.monthly_summary;
+  makeChart('chart-monthly', {
+    type: 'bar',
+    data: {
+      labels: months.map(ymLabel),
+      datasets: [{
+        label: '出荷金額',
+        data: months.map(m => summary[m] || 0),
+        backgroundColor: months.map(m => m == String(d.current_yyyymm) ? '#1a56db' : '#93c5fd'),
+        borderRadius: 4,
+      }]
+    },
+    options: { responsive: true, plugins: { legend: { display: false } },
+      scales: { y: { ticks: { callback: v => '¥' + (v/1e6).toFixed(0) + 'M' } } } }
+  });
+
+  // Pie chart - current month brands
+  const curYm = String(d.current_yyyymm);
+  const brandData = (data.brand_monthly[curYm] || []).slice(0, 8);
+  makeChart('chart-pie', {
+    type: 'pie',
+    data: {
+      labels: brandData.map(b => b.brand),
+      datasets: [{ data: brandData.map(b => b.amount), backgroundColor: PALETTE }]
+    },
+    options: { responsive: true, plugins: { legend: { position: 'right', labels: { font: { size: 11 } } } } }
+  });
+
+  // Cumulative line
+  makeChart('chart-cumulative', {
+    type: 'line',
+    data: {
+      labels: months.map(ymLabel),
+      datasets: [{
+        label: '累計出荷金額',
+        data: months.reduce((acc, m) => { acc.push((acc.length ? acc[acc.length-1] : 0) + (summary[m] || 0)); return acc; }, []),
+        borderColor: '#1a56db', backgroundColor: 'rgba(26,86,219,.1)', fill: true, tension: 0.3, pointRadius: 3,
+      }]
+    },
+    options: { responsive: true, plugins: { legend: { display: false } },
+      scales: { y: { ticks: { callback: v => '¥' + (v/1e8).toFixed(1) + 'B' } } } }
+  });
+}
+
+// ===================== Brand =====================
+function renderBrand() {
+  renderBrandMonthly();
+  // Populate month selector
+  const data = analyticsData[currentStore];
+  const sel = document.getElementById('brand-month-sel');
+  const months = data.months;
+  if (sel.children.length === 0) {
+    months.forEach(m => {
+      const o = document.createElement('option');
+      o.value = m; o.textContent = ymLabel(m);
+      sel.appendChild(o);
+    });
+    sel.value = String(data.dashboard.current_yyyymm);
+  }
+}
+
+function renderBrandMonthly() {
+  const data = analyticsData[currentStore];
+  if (!data) return;
+  const sel = document.getElementById('brand-month-sel');
+  const months = data.months;
+  if (!sel.value && months.length) sel.value = months[months.length - 1];
+  const ym = sel.value;
+  const rows = data.brand_monthly[ym] || [];
+  const maxAmt = rows[0]?.amount || 1;
+  document.getElementById('brand-monthly-table').innerHTML = `
+    <table>
+      <thead><tr><th>順位</th><th>ブランド</th><th>出荷金額</th><th>構成比</th><th>シェア</th></tr></thead>
+      <tbody>${rows.map(r => `<tr>
+        <td>${rankBadge(r.rank)}</td>
+        <td>${r.brand}</td>
+        <td class="amount">${fmt(r.amount)}</td>
+        <td>${r.share.toFixed(1)}%</td>
+        <td><div class="bar-mini" style="width:${Math.max(4,r.amount/maxAmt*120)}px"></div></td>
+      </tr>`).join('')}</tbody>
+    </table>`;
+}
+
+function renderBrandCumulative() {
+  const data = analyticsData[currentStore];
+  if (!data) return;
+  const rows = data.cumulative_brand_ranking;
+  const maxAmt = rows[0]?.amount || 1;
+  document.getElementById('brand-cumulative-table').innerHTML = `
+    <table>
+      <thead><tr><th>順位</th><th>ブランド</th><th>年累計金額</th><th>構成比</th><th>順位変化</th><th>シェア</th></tr></thead>
+      <tbody>${rows.map(r => {
+        const chg = r.rank_change;
+        const chgHtml = chg == null ? '<span style="color:var(--text-sub)">—</span>' :
+          chg > 0 ? `<span class="change-up">▲${chg}</span>` :
+          chg < 0 ? `<span class="change-down">▼${Math.abs(chg)}</span>` : '→';
+        return `<tr>
+          <td>${rankBadge(r.rank)}</td>
+          <td>${r.brand}</td>
+          <td class="amount">${fmt(r.amount)}</td>
+          <td>${r.share.toFixed(1)}%</td>
+          <td>${chgHtml}</td>
+          <td><div class="bar-mini" style="width:${Math.max(4,r.amount/maxAmt*120)}px"></div></td>
+        </tr>`;
+      }).join('')}</tbody>
+    </table>`;
+}
+
+function renderBrandTrend() {
+  const data = analyticsData[currentStore];
+  if (!data) return;
+  const brands = Object.keys(data.brand_trend);
+  const months = data.months;
+  // Filter to current year
+  const curYear = String(data.dashboard.current_yyyymm).slice(0,4);
+  const curMonths = months.filter(m => m.startsWith(curYear));
+  makeChart('chart-brand-trend', {
+    type: 'line',
+    data: {
+      labels: curMonths.map(ymLabel),
+      datasets: brands.map((b, i) => ({
+        label: b,
+        data: curMonths.map(m => data.brand_trend[b]?.[m] || 0),
+        borderColor: PALETTE[i % PALETTE.length],
+        backgroundColor: 'transparent',
+        tension: 0.3, pointRadius: 4,
+      }))
+    },
+    options: { responsive: true,
+      plugins: { legend: { position: 'bottom', labels: { font: { size: 11 } } } },
+      scales: { y: { ticks: { callback: v => '¥' + (v/1e6).toFixed(0) + 'M' } } } }
+  });
+}
+
+// ===================== Product =====================
+function renderProduct() {
+  const data = analyticsData[currentStore];
+  const sel = document.getElementById('product-month-sel');
+  const months = data.months;
+  if (sel.children.length === 0) {
+    months.forEach(m => {
+      const o = document.createElement('option');
+      o.value = m; o.textContent = ymLabel(m);
+      sel.appendChild(o);
+    });
+    sel.value = String(data.dashboard.current_yyyymm);
+  }
+  renderProductMonthly();
+}
+
+function productTableHtml(rows) {
+  return `<table>
+    <thead><tr><th>順位</th><th>ブランド</th><th>商品名</th><th>JAN/コード</th><th>数量</th><th>金額</th></tr></thead>
+    <tbody>${rows.map(r => `<tr>
+      <td>${rankBadge(r.rank)}</td>
+      <td>${r.brand}</td>
+      <td style="max-width:220px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="${r.product}">${r.product}</td>
+      <td style="font-size:11px;color:var(--text-sub);">${r.jan || r.code || '—'}</td>
+      <td class="amount">${fmtQty(r.qty)}</td>
+      <td class="amount">${fmt(r.amount)}</td>
+    </tr>`).join('')}</tbody>
+  </table>`;
+}
+
+function renderProductMonthly() {
+  const data = analyticsData[currentStore];
+  if (!data) return;
+  const ym = document.getElementById('product-month-sel').value;
+  const rows = data.product_monthly_top10[ym] || [];
+  document.getElementById('product-monthly-table').innerHTML = productTableHtml(rows);
+}
+
+function renderProductCumulative() {
+  const data = analyticsData[currentStore];
+  if (!data) return;
+  document.getElementById('product-cumulative-table').innerHTML = productTableHtml(data.cumulative_top10);
+}
+
+// ===================== Key Products =====================
+function renderKeyTags() {
+  const tags = keyTags[currentStore];
+  document.getElementById('key-tags').innerHTML = tags.map((t, i) => `
+    <span class="tag">${t}<button onclick="removeKeyTag(${i})">×</button></span>`).join('');
+}
+
+function addKeyTag() {
+  const inp = document.getElementById('key-input');
+  const val = inp.value.trim();
+  if (!val) return;
+  if (!keyTags[currentStore].includes(val)) {
+    keyTags[currentStore].push(val);
+    renderKeyTags();
+  }
+  inp.value = '';
+}
+
+function removeKeyTag(i) {
+  keyTags[currentStore].splice(i, 1);
+  renderKeyTags();
+}
+
+async function saveKeyProducts() {
+  const pw = document.getElementById('edit-password').value;
+  const res = await fetch(`/api/key_products/${currentStore}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-Edit-Password': pw },
+    body: JSON.stringify({ keywords: keyTags[currentStore] }),
+  });
+  if (!res.ok) { alert('パスワードが違います'); return; }
+  const data = await res.json();
+  keyProductData[currentStore] = data;
+  keyTags[currentStore] = [...data.keywords];
+  renderKey();
+}
+
+function renderKey() {
+  renderKeyTags();
+  const kpd = keyProductData[currentStore];
+  if (!kpd) return;
+  const container = document.getElementById('key-charts');
+  const keywords = keyTags[currentStore];
+  const data = kpd.data;
+  const months = kpd.months;
+
+  destroyCharts();
+  container.innerHTML = '';
+
+  keywords.forEach((kw, i) => {
+    const d = data[kw];
+    if (!d) {
+      container.innerHTML += `<div class="card" style="margin-bottom:16px;"><p style="color:var(--text-sub);">「${kw}」— データなし</p></div>`;
+      return;
+    }
+    const cid1 = `key-chart-${i}-monthly`;
+    const cid2 = `key-chart-${i}-yoy`;
+    container.innerHTML += `
+      <div class="card" style="margin-bottom:16px;">
+        <div class="section-title" style="font-size:14px;">${kw}</div>
+        <div style="font-size:13px;color:var(--text-sub);margin-bottom:16px;">累計出荷金額：${fmt(d.cumulative)}</div>
+        <div class="chart-grid">
+          <div>
+            <h3 style="font-size:13px;font-weight:700;color:var(--text-sub);margin-bottom:12px;">月別推移</h3>
+            <canvas id="${cid1}" style="max-height:200px;"></canvas>
+          </div>
+          <div>
+            <h3 style="font-size:13px;font-weight:700;color:var(--text-sub);margin-bottom:12px;">前年同月比</h3>
+            <canvas id="${cid2}" style="max-height:200px;"></canvas>
+          </div>
+        </div>
+      </div>`;
+
+    requestAnimationFrame(() => {
+      makeChart(cid1, {
+        type: 'bar',
+        data: {
+          labels: months.map(ymLabel),
+          datasets: [{ label: '出荷金額', data: months.map(m => d.monthly[m]?.amount || 0),
+            backgroundColor: PALETTE[i % PALETTE.length], borderRadius: 4 }]
+        },
+        options: { responsive: true, plugins: { legend: { display: false } },
+          scales: { y: { ticks: { callback: v => '¥'+(v/1e6).toFixed(0)+'M' } } } }
+      });
+
+      const yoyMonths = months.filter(m => d.yoy[m] != null);
+      makeChart(cid2, {
+        type: 'bar',
+        data: {
+          labels: yoyMonths.map(ymLabel),
+          datasets: [{ label: '前年比(%)', data: yoyMonths.map(m => d.yoy[m]),
+            backgroundColor: yoyMonths.map(m => d.yoy[m] >= 0 ? '#10b98180' : '#ef444480'),
+            borderColor: yoyMonths.map(m => d.yoy[m] >= 0 ? '#10b981' : '#ef4444'),
+            borderWidth: 1, borderRadius: 4 }]
+        },
+        options: { responsive: true, plugins: { legend: { display: false } },
+          scales: { y: { ticks: { callback: v => v.toFixed(0)+'%' } } } }
+      });
+    });
+  });
+}
+
+// ===================== Upload =====================
+function handleDrop(e, store) {
+  e.preventDefault();
+  const file = e.dataTransfer.files[0];
+  document.getElementById(`file-${store}`)._file = file;
+  document.getElementById(`drop-${store}`).textContent = `📄 ${file.name}`;
+}
+
+function handleFile(e, store) {
+  const file = e.target.files[0];
+  document.getElementById(`drop-${store}`).textContent = `📄 ${file.name}`;
+  document.getElementById(`drop-${store}`).onclick = null;
+  e.target._chosen = file;
+}
+
+async function uploadFile(store) {
+  const pw = document.getElementById('upload-password').value;
+  const year = document.getElementById(`year-${store}`).value;
+  const fileEl = document.getElementById(`file-${store}`);
+  const dropEl = document.getElementById(`drop-${store}`);
+  const file = fileEl._file || fileEl._chosen || (fileEl.files && fileEl.files[0]);
+  if (!file) { dropEl.click(); return; }
+  const fd = new FormData();
+  fd.append('file', file);
+  fd.append('year', year);
+  const status = document.getElementById('upload-status');
+  status.textContent = 'アップロード中...';
+  try {
+    const res = await fetch(`/api/upload/${store}`, { method: 'POST', headers: { 'X-Edit-Password': pw }, body: fd });
+    if (!res.ok) { status.style.color = 'red'; status.textContent = 'エラー: パスワードが違うか、ファイル形式が不正です。'; return; }
+    analyticsData[store] = null; // invalidate
+    status.style.color = 'green';
+    status.textContent = `✓ ${store === 'wechat' ? '店舗A' : '店舗B'} ${year}年データを更新しました。`;
+  } catch(e) {
+    status.style.color = 'red'; status.textContent = 'アップロードに失敗しました。';
+  }
+}
+
+// Make drop areas clickable
+document.addEventListener('DOMContentLoaded', () => {
+  ['wechat','novarca'].forEach(store => {
+    document.getElementById(`drop-${store}`).onclick = () => document.getElementById(`file-${store}`).click();
+  });
+});
+
+// ===================== Start =====================
+init();
+</script>
+</body>
+</html>
