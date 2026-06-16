@@ -2049,6 +2049,15 @@ function handleImportFile(file){
 }
 
 // Metric and row-type keyword maps
+// シート名 → ダッシュボード事業名 マッピング（旧名→新名）
+const SHEET_NAME_MAP = {
+  'ADD TMALL':'ADDICTION TMALL','ADD Douyin':'ADDICTION Douyin',
+  'JILL TMALL':'JILLSTUART TMALL','雪BLUETMALL':'雪肌精BLUE TMALL',
+  'アイスタイル':'アイスタイル（TMALL/Douyin）',
+  'UNQ':'UNQ（KOSE　TMALL／KOSE Douyin／Wechat）',
+  'UNIVATE':'UNIVATE（TMALL/Douyin）','neese':'Nese',
+  'SKPS_ADDSKNY':'SKPS_ADDICTION・Skpro','SKPS_CD':'SKPS_DECORTE',
+};
 const METRIC_MAP = {
   '店消':['店消','店頭消化','店頭'], '売上':['売上高','売上'], '原価':['原価','売上原価'],
   '粗利':['粗利益','粗利'], '販管費':['販管費','販売管理費','販売費'],
@@ -2056,95 +2065,71 @@ const METRIC_MAP = {
   'CVR':['CVR','転換率'], '客単価':['客単価','単価']
 };
 const ROWTYPE_MAP = {
-  'actual':['本年実績','今年実績','実績','actual'],
-  'plan':['計画','予算','plan','budget'],
-  'prev':['前年実績','前年','昨年','last year','prev']
+  'actual':['本年実績'], 'plan':['計画'], 'prev':['前年実績']
 };
 
 function detectMetric(label){
   const l = String(label||'').trim();
   for(const [metric, keywords] of Object.entries(METRIC_MAP)){
-    if(keywords.some(k=>l.includes(k))) return metric;
+    if(keywords.some(k=>l===k||l.startsWith(k))) return metric;
   }
   return null;
 }
 function detectRowType(label){
-  const l = String(label||'').toLowerCase();
+  const l = String(label||'').trim();
   for(const [type, keywords] of Object.entries(ROWTYPE_MAP)){
-    if(keywords.some(k=>l.includes(k.toLowerCase()))) return type;
+    if(keywords.some(k=>l===k)) return type;
   }
   return null;
 }
 function detectBizName(sheetName){
-  // Find closest match in D.businesses
+  // Direct mapping first
+  if(SHEET_NAME_MAP[sheetName]) return SHEET_NAME_MAP[sheetName];
+  // Exact match in current businesses
   const names = D.businesses.map(b=>b.name);
-  // Exact match first
   if(names.includes(sheetName)) return sheetName;
-  // Partial match
-  const lower = sheetName.toLowerCase();
-  const match = names.find(n=>n.toLowerCase().includes(lower)||lower.includes(n.toLowerCase().substring(0,4)));
-  return match || null;
+  return null;
 }
 
 function parseWorkbook(wb){
-  const results = []; // [{bizName, matched, metric, rowType, values:[12 nums]}]
+  const results = [];
+  // Skip non-business sheets
+  const skipSheets = new Set(['Sheet1','元データ','まとめ','（新規）','（新規） (2)']);
   wb.SheetNames.forEach(sheetName => {
+    if(skipSheets.has(sheetName)) return;
     const ws = wb.Sheets[sheetName];
     const rows = XLSX.utils.sheet_to_json(ws, {header:1, defval:null});
     const matched = detectBizName(sheetName);
 
-    // Find month header row (row with many numbers 1-12 or "1月" "2月" etc)
-    let monthCols = null; // array of 12 column indices
-    let monthRowIdx = -1;
-    for(let ri=0; ri<Math.min(10,rows.length); ri++){
+    // This Excel format: col B(1)=metric, col C(2)=rowType, col D-O(3-14)=months 1-12
+    // Find the header row with "1月" to confirm month column positions
+    let monthStartCI = 3; // default: column D = index 3
+    for(let ri=0; ri<Math.min(8,rows.length); ri++){
       const row = rows[ri];
-      const cols = [];
-      for(let ci=0; ci<row.length; ci++){
-        const v = String(row[ci]||'');
-        if(/^[1-9]月$|^1[0-2]月$/.test(v)||/^\s*[1-9]\s*$/.test(v)||/^\s*1[0-2]\s*$/.test(v)){
-          cols.push({ci, mi: parseInt(v)-1});
-        }
-      }
-      if(cols.length >= 6){ monthCols = cols; monthRowIdx = ri; break; }
-    }
-    // If no month header, assume cols 1-12 start at index 1 or 2
-    if(!monthCols){
-      // Look for row with 12 consecutive numbers
-      for(let ri=0; ri<rows.length; ri++){
-        const row = rows[ri];
-        let numCount=0, startCI=-1;
-        for(let ci=0;ci<row.length;ci++){
-          if(row[ci]!==null&&!isNaN(parseFloat(row[ci]))){
-            if(startCI<0) startCI=ci;
-            numCount++;
-          } else if(numCount>0) break;
-        }
-        if(numCount>=10){ monthCols=Array.from({length:Math.min(numCount,12)},(_,i)=>({ci:startCI+i,mi:i})); break; }
+      for(let ci=0; ci<(row||[]).length; ci++){
+        if(String(row[ci]||'').trim()==='1月'){ monthStartCI=ci; break; }
       }
     }
-    if(!monthCols) return; // can't parse this sheet
 
-    // Now scan rows for metric + rowtype
+    // Scan each row
     let currentMetric = null;
-    rows.forEach((row, ri) => {
-      if(ri <= monthRowIdx) return;
-      const label0 = String(row[0]||'').trim();
-      const label1 = String(row[1]||'').trim();
-      const label = label0 || label1;
+    rows.forEach(row => {
+      if(!row) return;
+      const colB = String(row[1]||'').trim();
+      const colC = String(row[2]||'').trim();
 
-      const m = detectMetric(label);
+      const m = detectMetric(colB);
       if(m) currentMetric = m;
 
-      const rt = detectRowType(label);
+      const rt = detectRowType(colC);
       if(rt && currentMetric){
         const values = Array(12).fill(0);
-        monthCols.forEach(({ci, mi}) => {
-          const v = parseFloat(String(row[ci]||'').replace(/,/g,''));
-          if(!isNaN(v)) values[mi] = v;
-        });
-        const hasData = values.some(v=>v!==0);
-        if(hasData){
-          results.push({sheetName, bizName: matched||sheetName, matched, metric:currentMetric, rowType:rt, values});
+        for(let i=0; i<12; i++){
+          const v = parseFloat(String(row[monthStartCI+i]||'').replace(/,/g,''));
+          if(!isNaN(v)) values[i] = v;
+        }
+        if(values.some(v=>v!==0)){
+          results.push({sheetName, bizName:matched||sheetName, matched, metric:currentMetric, rowType:rt, values});
         }
       }
     });
