@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>アジア事業部 PL ダッシュボード</title>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 :root{
@@ -133,6 +134,7 @@ body{font-family:'UD デジタル 教科書体 NK','UDDigitalKyokasho-NK','Hirag
 .header-logo span{color:var(--accent)}
 .header-title{font-size:.82rem;color:var(--subtle);margin-left:4px;hidden-sm:block}
 .header-spacer{flex:1}
+#importDropZone:hover{border-color:var(--accent);background:rgba(99,102,241,.04)}
 .header-updated{font-size:.72rem;color:var(--muted);background:var(--bg3);padding:3px 10px;border-radius:20px}
 .user-badge{display:flex;align-items:center;gap:8px;background:var(--bg3);border:1px solid var(--border);border-radius:20px;padding:4px 12px 4px 4px;cursor:pointer;position:relative}
 .user-avatar{width:28px;height:28px;border-radius:50%;background:var(--accent);display:flex;align-items:center;justify-content:center;font-size:.8rem;font-weight:700}
@@ -285,6 +287,7 @@ body{font-family:'UD デジタル 教科書体 NK','UDDigitalKyokasho-NK','Hirag
     <div class="header-logo">📊 <span>PL</span> Manager</div>
     <div class="header-title" id="headerTitle"></div>
     <div class="header-spacer"></div>
+    <button id="importBtn" onclick="openImportModal()" style="display:none;background:var(--accent);color:#fff;border:none;border-radius:8px;padding:6px 14px;font-size:.78rem;font-weight:600;cursor:pointer;gap:4px">📂 Excelインポート</button>
     <div class="header-updated" id="headerDate"></div>
     <select class="year-select" id="yearSelect" onchange="onYearChange(this.value)">
       <option value="2026">2026年</option>
@@ -583,6 +586,8 @@ function startApp(){
   document.getElementById('headerDate').textContent = '最終更新: 2026/06/16';
   // Admin のみユーザー管理タブを表示
   document.getElementById('navUsers').style.display = isAdmin() ? 'block' : 'none';
+  if(document.getElementById('importBtn'))
+    document.getElementById('importBtn').style.display = canEdit() ? 'flex' : 'none';
   renderAll();
 }
 
@@ -2013,6 +2018,230 @@ CBブランド：15,523千円
   }
   document.getElementById('loginScreen').classList.add('visible');
 })();
+
+// ===== EXCEL IMPORT =====
+let _importData = null; // stores parsed data before applying
+
+function openImportModal(){
+  document.getElementById('importModal').classList.add('open');
+  document.getElementById('importPreview').style.display='none';
+  document.getElementById('importStatus').textContent='';
+  document.getElementById('importFileInput').value='';
+}
+function closeImportModal(){ document.getElementById('importModal').classList.remove('open'); }
+function handleImportDrop(e){ const f=e.dataTransfer.files[0]; if(f) handleImportFile(f); }
+
+function handleImportFile(file){
+  if(!file) return;
+  document.getElementById('importStatus').textContent = '解析中...';
+  const reader = new FileReader();
+  reader.onload = e => {
+    try {
+      const wb = XLSX.read(new Uint8Array(e.target.result), {type:'array'});
+      const parsed = parseWorkbook(wb);
+      _importData = parsed;
+      showImportPreview(parsed);
+    } catch(err) {
+      document.getElementById('importStatus').textContent = 'エラー: ' + err.message;
+    }
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+// Metric and row-type keyword maps
+const METRIC_MAP = {
+  '店消':['店消','店頭消化','店頭'], '売上':['売上高','売上'], '原価':['原価','売上原価'],
+  '粗利':['粗利益','粗利'], '販管費':['販管費','販売管理費','販売費'],
+  '貢献利益':['貢献利益','営業利益','営業'], 'UV':['UV','ユーザー数','訪問者'],
+  'CVR':['CVR','転換率'], '客単価':['客単価','単価']
+};
+const ROWTYPE_MAP = {
+  'actual':['本年実績','今年実績','実績','actual'],
+  'plan':['計画','予算','plan','budget'],
+  'prev':['前年実績','前年','昨年','last year','prev']
+};
+
+function detectMetric(label){
+  const l = String(label||'').trim();
+  for(const [metric, keywords] of Object.entries(METRIC_MAP)){
+    if(keywords.some(k=>l.includes(k))) return metric;
+  }
+  return null;
+}
+function detectRowType(label){
+  const l = String(label||'').toLowerCase();
+  for(const [type, keywords] of Object.entries(ROWTYPE_MAP)){
+    if(keywords.some(k=>l.includes(k.toLowerCase()))) return type;
+  }
+  return null;
+}
+function detectBizName(sheetName){
+  // Find closest match in D.businesses
+  const names = D.businesses.map(b=>b.name);
+  // Exact match first
+  if(names.includes(sheetName)) return sheetName;
+  // Partial match
+  const lower = sheetName.toLowerCase();
+  const match = names.find(n=>n.toLowerCase().includes(lower)||lower.includes(n.toLowerCase().substring(0,4)));
+  return match || null;
+}
+
+function parseWorkbook(wb){
+  const results = []; // [{bizName, matched, metric, rowType, values:[12 nums]}]
+  wb.SheetNames.forEach(sheetName => {
+    const ws = wb.Sheets[sheetName];
+    const rows = XLSX.utils.sheet_to_json(ws, {header:1, defval:null});
+    const matched = detectBizName(sheetName);
+
+    // Find month header row (row with many numbers 1-12 or "1月" "2月" etc)
+    let monthCols = null; // array of 12 column indices
+    let monthRowIdx = -1;
+    for(let ri=0; ri<Math.min(10,rows.length); ri++){
+      const row = rows[ri];
+      const cols = [];
+      for(let ci=0; ci<row.length; ci++){
+        const v = String(row[ci]||'');
+        if(/^[1-9]月$|^1[0-2]月$/.test(v)||/^\s*[1-9]\s*$/.test(v)||/^\s*1[0-2]\s*$/.test(v)){
+          cols.push({ci, mi: parseInt(v)-1});
+        }
+      }
+      if(cols.length >= 6){ monthCols = cols; monthRowIdx = ri; break; }
+    }
+    // If no month header, assume cols 1-12 start at index 1 or 2
+    if(!monthCols){
+      // Look for row with 12 consecutive numbers
+      for(let ri=0; ri<rows.length; ri++){
+        const row = rows[ri];
+        let numCount=0, startCI=-1;
+        for(let ci=0;ci<row.length;ci++){
+          if(row[ci]!==null&&!isNaN(parseFloat(row[ci]))){
+            if(startCI<0) startCI=ci;
+            numCount++;
+          } else if(numCount>0) break;
+        }
+        if(numCount>=10){ monthCols=Array.from({length:Math.min(numCount,12)},(_,i)=>({ci:startCI+i,mi:i})); break; }
+      }
+    }
+    if(!monthCols) return; // can't parse this sheet
+
+    // Now scan rows for metric + rowtype
+    let currentMetric = null;
+    rows.forEach((row, ri) => {
+      if(ri <= monthRowIdx) return;
+      const label0 = String(row[0]||'').trim();
+      const label1 = String(row[1]||'').trim();
+      const label = label0 || label1;
+
+      const m = detectMetric(label);
+      if(m) currentMetric = m;
+
+      const rt = detectRowType(label);
+      if(rt && currentMetric){
+        const values = Array(12).fill(0);
+        monthCols.forEach(({ci, mi}) => {
+          const v = parseFloat(String(row[ci]||'').replace(/,/g,''));
+          if(!isNaN(v)) values[mi] = v;
+        });
+        const hasData = values.some(v=>v!==0);
+        if(hasData){
+          results.push({sheetName, bizName: matched||sheetName, matched, metric:currentMetric, rowType:rt, values});
+        }
+      }
+    });
+  });
+  return results;
+}
+
+function showImportPreview(data){
+  const status = document.getElementById('importStatus');
+  if(!data.length){ status.textContent='データが検出されませんでした。'; return; }
+
+  const grouped = {};
+  data.forEach(d=>{ (grouped[d.sheetName]||(grouped[d.sheetName]=[])).push(d); });
+
+  const typeLabel = {actual:'本年実績', plan:'計画', prev:'前年実績'};
+  let html = '';
+  Object.entries(grouped).forEach(([sheet, items])=>{
+    const matched = items[0].matched;
+    html += `<div style="margin-bottom:12px;border:1px solid var(--border);border-radius:8px;overflow:hidden">
+      <div style="background:var(--bg3);padding:8px 12px;font-size:.78rem;font-weight:700">
+        📄 ${sheet} → <span style="color:${matched?'var(--green)':'var(--red)'}">${matched||'⚠️ 未マッチ（スキップ）'}</span>
+      </div>
+      <table style="width:100%;font-size:.7rem;border-collapse:collapse">
+      <tr style="background:var(--bg3)"><th style="padding:4px 8px;text-align:left">指標</th><th style="padding:4px 8px;text-align:left">種別</th><th style="padding:4px 8px">1月</th><th>2月</th><th>3月</th><th>...</th><th>12月</th></tr>`;
+    items.forEach(d=>{
+      html += `<tr style="border-top:1px solid var(--border)">
+        <td style="padding:4px 8px;font-weight:600">${d.metric}</td>
+        <td style="padding:4px 8px;color:var(--muted)">${typeLabel[d.rowType]}</td>
+        <td style="padding:4px 8px;text-align:right">${d.values[0]?Math.round(d.values[0]).toLocaleString():'—'}</td>
+        <td style="text-align:right">${d.values[1]?Math.round(d.values[1]).toLocaleString():'—'}</td>
+        <td style="text-align:right">${d.values[2]?Math.round(d.values[2]).toLocaleString():'—'}</td>
+        <td style="text-align:center;color:var(--muted)">...</td>
+        <td style="text-align:right">${d.values[11]?Math.round(d.values[11]).toLocaleString():'—'}</td>
+      </tr>`;
+    });
+    html += '</table></div>';
+  });
+
+  document.getElementById('importPreviewTable').innerHTML = html;
+  document.getElementById('importPreview').style.display = 'block';
+  document.getElementById('importCancelBtn').style.display = 'none';
+  status.textContent = `${data.length}件のデータを検出しました。`;
+}
+
+function applyImport(){
+  if(!_importData) return;
+  let count = 0;
+  _importData.forEach(d => {
+    if(!d.matched) return; // skip unmatched
+    const name = d.matched;
+    const metric = d.metric;
+    d.values.forEach((v, mi) => {
+      if(v === 0) return;
+      if(d.rowType === 'actual') setBizEdit(name, metric, mi, v);
+      else if(d.rowType === 'plan') setPlanEdit(name, metric, mi, v);
+      else if(d.rowType === 'prev') setPrevEdit(name, metric, mi, v);
+      count++;
+    });
+  });
+  closeImportModal();
+  renderDashboard();
+  renderPL();
+  renderBiz();
+  alert(`✅ ${count}セルのデータをインポートしました。`);
+}
 </script>
+
+<!-- IMPORT MODAL -->
+<div class="modal-overlay" id="importModal">
+  <div class="modal-box" style="max-width:680px;max-height:80vh;overflow-y:auto">
+    <div style="font-size:1rem;font-weight:700;margin-bottom:16px">📂 Excelデータインポート</div>
+    <div style="font-size:.8rem;color:var(--muted);margin-bottom:12px">
+      Excelファイルをアップロードすると、シート名から事業を自動検出し、データを更新します。<br>
+      対応形式：<b>.xlsx / .xls</b>　｜　更新対象：本年実績・計画・前年実績
+    </div>
+    <div id="importDropZone" style="border:2px dashed var(--border);border-radius:10px;padding:32px;text-align:center;cursor:pointer;transition:border-color .15s;margin-bottom:16px"
+      onclick="document.getElementById('importFileInput').click()"
+      ondragover="event.preventDefault();this.style.borderColor='var(--accent)'"
+      ondragleave="this.style.borderColor='var(--border)'"
+      ondrop="event.preventDefault();this.style.borderColor='var(--border)';handleImportDrop(event)">
+      <div style="font-size:2rem">📁</div>
+      <div style="font-size:.85rem;color:var(--muted);margin-top:8px">クリックまたはドラッグ＆ドロップ</div>
+      <input type="file" id="importFileInput" accept=".xlsx,.xls" style="display:none" onchange="handleImportFile(this.files[0])">
+    </div>
+    <div id="importPreview" style="display:none">
+      <div style="font-size:.82rem;font-weight:700;margin-bottom:8px">検出結果プレビュー</div>
+      <div id="importPreviewTable"></div>
+      <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px">
+        <button onclick="closeImportModal()" style="background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:8px 18px;font-size:.82rem;cursor:pointer">キャンセル</button>
+        <button onclick="applyImport()" style="background:var(--accent);color:#fff;border:none;border-radius:8px;padding:8px 18px;font-size:.82rem;font-weight:700;cursor:pointer">✅ 適用する</button>
+      </div>
+    </div>
+    <div id="importStatus" style="font-size:.8rem;color:var(--muted);margin-top:8px"></div>
+    <div style="text-align:right;margin-top:12px" id="importCancelBtn">
+      <button onclick="closeImportModal()" style="background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:8px 18px;font-size:.82rem;cursor:pointer">閉じる</button>
+    </div>
+  </div>
+</div>
 </body>
 </html>
