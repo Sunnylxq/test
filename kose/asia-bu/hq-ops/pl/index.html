@@ -733,7 +733,7 @@ function deleteUser(email){
 
 // ===== FORMAT =====
 const fmt  = v => Math.round(v).toLocaleString();
-const fmtM = v => '¥'+Math.round(v/1000).toLocaleString()+'M';
+const fmtM = v => Math.round(v).toLocaleString()+'千円';
 const pct  = v => v.toFixed(1)+'%';
 const chg  = v => (v>=0?'▲ +':'▼ ')+Math.abs(v).toFixed(1)+'%';
 
@@ -904,7 +904,7 @@ function renderDashboard(){
   const total_sum = bizSums.reduce((a,b)=>a+b.sum,0);
   const pieOpts = (total) => ({responsive:true,plugins:{
     legend:{position:'right',labels:{color:'#475569',font:{size:9},boxWidth:10,padding:6}},
-    tooltip:{callbacks:{label:ctx=>`${fmtM(ctx.raw)}千円 (${(ctx.raw/total*100).toFixed(1)}%)`}}
+    tooltip:{callbacks:{label:ctx=>`${fmtM(ctx.raw)} (${(ctx.raw/total*100).toFixed(1)}%)`}}
   }});
   mkChart('chartPie',{type:'doughnut',data:{
     labels:bizSums.map(b=>b.name),
