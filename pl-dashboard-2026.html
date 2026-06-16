@@ -2128,6 +2128,16 @@ function exportExcel(){
       });
     });
 
+    // 差異分析・コメント セクション
+    aoa.push([]);
+    aoa.push(['', '差異分析・コメント']);
+    months.forEach((mo, mi) => {
+      const comment = getAnalysis(name, mi);
+      // Strip HTML tags for plain text export
+      const plain = comment.replace(/<br\s*\/?>/gi,'\n').replace(/<[^>]+>/g,'').replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&amp;/g,'&');
+      aoa.push(['', mo, plain||'']);
+    });
+
     const ws = XLSX.utils.aoa_to_sheet(aoa);
     // Column widths
     ws['!cols'] = [{wch:4},{wch:14},{wch:12},...Array(12).fill({wch:10}),{wch:12}];
@@ -2168,15 +2178,6 @@ function handleImportFile(file){
 }
 
 // Metric and row-type keyword maps
-// シート名 → ダッシュボード事業名 マッピング（旧名→新名）
-const SHEET_NAME_MAP = {
-  'ADD TMALL':'ADDICTION TMALL','ADD Douyin':'ADDICTION Douyin',
-  'JILL TMALL':'JILLSTUART TMALL','雪BLUETMALL':'雪肌精BLUE TMALL',
-  'アイスタイル':'アイスタイル（TMALL/Douyin）',
-  'UNQ':'UNQ（KOSE　TMALL／KOSE Douyin／Wechat）',
-  'UNIVATE':'UNIVATE（TMALL/Douyin）','neese':'Nese',
-  'SKPS_ADDSKNY':'SKPS_ADDICTION・Skpro','SKPS_CD':'SKPS_DECORTE',
-};
 const METRIC_MAP = {
   '店消':['店消','店頭消化','店頭'], '売上':['売上高','売上'], '原価':['原価','売上原価'],
   '粗利':['粗利益','粗利'], '販管費':['販管費','販売管理費','販売費'],
@@ -2184,71 +2185,120 @@ const METRIC_MAP = {
   'CVR':['CVR','転換率'], '客単価':['客単価','単価']
 };
 const ROWTYPE_MAP = {
-  'actual':['本年実績'], 'plan':['計画'], 'prev':['前年実績']
+  'actual':['本年実績','今年実績','実績','actual'],
+  'forecast':['本年見込み','見込み','forecast'],
+  'plan':['計画','予算','plan','budget'],
+  'prev':['前年実績','前年','昨年','last year','prev']
+};
+const SHEET_NAME_MAP = {
+  'ADD TMALL':'ADDICTION TMALL','ADD Douyin':'ADDICTION Douyin',
+  'JILL TMALL':'JILLSTUART TMALL','雪BLUETMALL':'雪肌精BLUE TMALL',
+  'アイスタイル':'アイスタイル（TMALL/Douyin）',
+  'UNQ':'UNQ（KOSE　TMALL／KOSE Douyin／Wechat）',
+  'UNIVATE':'UNIVATE（TMALL/Douyin）','neese':'Nese',
+  'SKPS_ADDSKNY':'SKPS_ADDICTION・Skpro','SKPS_CD':'SKPS_DECORTE'
 };
 
 function detectMetric(label){
   const l = String(label||'').trim();
   for(const [metric, keywords] of Object.entries(METRIC_MAP)){
-    if(keywords.some(k=>l===k||l.startsWith(k))) return metric;
+    if(keywords.some(k=>l.includes(k))) return metric;
   }
   return null;
 }
 function detectRowType(label){
-  const l = String(label||'').trim();
+  const l = String(label||'').toLowerCase();
   for(const [type, keywords] of Object.entries(ROWTYPE_MAP)){
-    if(keywords.some(k=>l===k)) return type;
+    if(keywords.some(k=>l.includes(k.toLowerCase()))) return type;
   }
   return null;
 }
 function detectBizName(sheetName){
-  // Direct mapping first
-  if(SHEET_NAME_MAP[sheetName]) return SHEET_NAME_MAP[sheetName];
-  // Exact match in current businesses
+  // Apply sheet name map first
+  const mapped = SHEET_NAME_MAP[sheetName] || sheetName;
   const names = D.businesses.map(b=>b.name);
-  if(names.includes(sheetName)) return sheetName;
-  return null;
+  if(names.includes(mapped)) return mapped;
+  // Partial match
+  const lower = mapped.toLowerCase();
+  const match = names.find(n=>n.toLowerCase().includes(lower)||lower.includes(n.toLowerCase().substring(0,4)));
+  return match || null;
 }
 
 function parseWorkbook(wb){
-  const results = [];
-  // Skip non-business sheets
-  const skipSheets = new Set(['Sheet1','元データ','まとめ','（新規）','（新規） (2)']);
+  const results = []; // [{bizName, matched, metric, rowType, values:[12 nums]}]
   wb.SheetNames.forEach(sheetName => {
-    if(skipSheets.has(sheetName)) return;
     const ws = wb.Sheets[sheetName];
     const rows = XLSX.utils.sheet_to_json(ws, {header:1, defval:null});
     const matched = detectBizName(sheetName);
 
-    // This Excel format: col B(1)=metric, col C(2)=rowType, col D-O(3-14)=months 1-12
-    // Find the header row with "1月" to confirm month column positions
-    let monthStartCI = 3; // default: column D = index 3
-    for(let ri=0; ri<Math.min(8,rows.length); ri++){
+    // Find month header row (row with many numbers 1-12 or "1月" "2月" etc)
+    let monthCols = null; // array of 12 column indices
+    let monthRowIdx = -1;
+    for(let ri=0; ri<Math.min(10,rows.length); ri++){
       const row = rows[ri];
-      for(let ci=0; ci<(row||[]).length; ci++){
-        if(String(row[ci]||'').trim()==='1月'){ monthStartCI=ci; break; }
+      const cols = [];
+      for(let ci=0; ci<row.length; ci++){
+        const v = String(row[ci]||'');
+        if(/^[1-9]月$|^1[0-2]月$/.test(v)||/^\s*[1-9]\s*$/.test(v)||/^\s*1[0-2]\s*$/.test(v)){
+          cols.push({ci, mi: parseInt(v)-1});
+        }
+      }
+      if(cols.length >= 6){ monthCols = cols; monthRowIdx = ri; break; }
+    }
+    // If no month header, assume cols 1-12 start at index 1 or 2
+    if(!monthCols){
+      // Look for row with 12 consecutive numbers
+      for(let ri=0; ri<rows.length; ri++){
+        const row = rows[ri];
+        let numCount=0, startCI=-1;
+        for(let ci=0;ci<row.length;ci++){
+          if(row[ci]!==null&&!isNaN(parseFloat(row[ci]))){
+            if(startCI<0) startCI=ci;
+            numCount++;
+          } else if(numCount>0) break;
+        }
+        if(numCount>=10){ monthCols=Array.from({length:Math.min(numCount,12)},(_,i)=>({ci:startCI+i,mi:i})); break; }
       }
     }
+    if(!monthCols) return; // can't parse this sheet
 
-    // Scan each row
+    // Now scan rows for metric + rowtype, and 差異分析 section
     let currentMetric = null;
-    rows.forEach(row => {
-      if(!row) return;
-      const colB = String(row[1]||'').trim();
-      const colC = String(row[2]||'').trim();
+    let inAnalysis = false;
+    const monthNames = ['1月','2月','3月','4月','5月','6月','7月','8月','9月','10月','11月','12月'];
+    rows.forEach((row, ri) => {
+      if(ri <= monthRowIdx) return;
+      const label0 = String(row[0]||'').trim();
+      const label1 = String(row[1]||'').trim();
+      const label = label0 || label1;
 
-      const m = detectMetric(colB);
+      // Check for 差異分析 section header
+      if(label.includes('差異分析')) { inAnalysis = true; return; }
+
+      if(inAnalysis){
+        // Each row: col B = month name, col C = comment text
+        const mo = String(row[1]||'').trim();
+        const mi = monthNames.indexOf(mo);
+        if(mi >= 0){
+          const text = String(row[2]||'').trim();
+          results.push({sheetName, bizName: matched||sheetName, matched, metric:null, rowType:'comment', monthIdx:mi, text});
+        }
+        return;
+      }
+
+      const m = detectMetric(label);
       if(m) currentMetric = m;
 
-      const rt = detectRowType(colC);
+      const rt = detectRowType(label);
       if(rt && currentMetric){
         const values = Array(12).fill(0);
-        for(let i=0; i<12; i++){
-          const v = parseFloat(String(row[monthStartCI+i]||'').replace(/,/g,''));
-          if(!isNaN(v)) values[i] = v;
-        }
-        if(values.some(v=>v!==0)){
-          results.push({sheetName, bizName:matched||sheetName, matched, metric:currentMetric, rowType:rt, values});
+        monthCols.forEach(({ci, mi}) => {
+          const v = parseFloat(String(row[ci]||'').replace(/,/g,''));
+          if(!isNaN(v)) values[mi] = v;
+        });
+        const hasData = values.some(v=>v!==0);
+        if(hasData){
+          results.push({sheetName, bizName: matched||sheetName, matched, metric:currentMetric, rowType:rt, values});
         }
       }
     });
@@ -2263,20 +2313,22 @@ function showImportPreview(data){
   const grouped = {};
   data.forEach(d=>{ (grouped[d.sheetName]||(grouped[d.sheetName]=[])).push(d); });
 
-  const typeLabel = {actual:'本年実績', plan:'計画', prev:'前年実績'};
+  const typeLabel = {actual:'本年実績', forecast:'本年見込み', plan:'計画', prev:'前年実績', comment:'差異分析コメント'};
   let html = '';
   Object.entries(grouped).forEach(([sheet, items])=>{
     const matched = items[0].matched;
+    const dataItems = items.filter(d=>d.rowType!=='comment');
+    const commentItems = items.filter(d=>d.rowType==='comment');
     html += `<div style="margin-bottom:12px;border:1px solid var(--border);border-radius:8px;overflow:hidden">
       <div style="background:var(--bg3);padding:8px 12px;font-size:.78rem;font-weight:700">
         📄 ${sheet} → <span style="color:${matched?'var(--green)':'var(--red)'}">${matched||'⚠️ 未マッチ（スキップ）'}</span>
       </div>
       <table style="width:100%;font-size:.7rem;border-collapse:collapse">
       <tr style="background:var(--bg3)"><th style="padding:4px 8px;text-align:left">指標</th><th style="padding:4px 8px;text-align:left">種別</th><th style="padding:4px 8px">1月</th><th>2月</th><th>3月</th><th>...</th><th>12月</th></tr>`;
-    items.forEach(d=>{
+    dataItems.forEach(d=>{
       html += `<tr style="border-top:1px solid var(--border)">
         <td style="padding:4px 8px;font-weight:600">${d.metric}</td>
-        <td style="padding:4px 8px;color:var(--muted)">${typeLabel[d.rowType]}</td>
+        <td style="padding:4px 8px;color:var(--muted)">${typeLabel[d.rowType]||d.rowType}</td>
         <td style="padding:4px 8px;text-align:right">${d.values[0]?Math.round(d.values[0]).toLocaleString():'—'}</td>
         <td style="text-align:right">${d.values[1]?Math.round(d.values[1]).toLocaleString():'—'}</td>
         <td style="text-align:right">${d.values[2]?Math.round(d.values[2]).toLocaleString():'—'}</td>
@@ -2284,6 +2336,11 @@ function showImportPreview(data){
         <td style="text-align:right">${d.values[11]?Math.round(d.values[11]).toLocaleString():'—'}</td>
       </tr>`;
     });
+    if(commentItems.length){
+      html += `<tr style="border-top:1px solid var(--border);background:var(--bg3)">
+        <td colspan="7" style="padding:4px 8px;color:var(--muted);font-size:.68rem">💬 差異分析コメント: ${commentItems.length}ヶ月分</td>
+      </tr>`;
+    }
     html += '</table></div>';
   });
 
@@ -2295,14 +2352,19 @@ function showImportPreview(data){
 
 function applyImport(){
   if(!_importData) return;
-  let count = 0;
+  let count = 0, commentCount = 0;
   _importData.forEach(d => {
     if(!d.matched) return; // skip unmatched
     const name = d.matched;
+    if(d.rowType === 'comment'){
+      if(d.text) { saveAnalysis(name, d.monthIdx, d.text); commentCount++; }
+      return;
+    }
     const metric = d.metric;
     d.values.forEach((v, mi) => {
       if(v === 0) return;
       if(d.rowType === 'actual') setBizEdit(name, metric, mi, v);
+      else if(d.rowType === 'forecast') setBizEdit(name, metric, mi, v);
       else if(d.rowType === 'plan') setPlanEdit(name, metric, mi, v);
       else if(d.rowType === 'prev') setPrevEdit(name, metric, mi, v);
       count++;
@@ -2312,7 +2374,9 @@ function applyImport(){
   renderDashboard();
   renderPL();
   renderBiz();
-  alert(`✅ ${count}セルのデータをインポートしました。`);
+  const msg = [`✅ ${count}セルのデータをインポートしました。`];
+  if(commentCount) msg.push(`💬 差異分析コメント ${commentCount}件をインポートしました。`);
+  alert(msg.join('\n'));
 }
 </script>
 
@@ -2322,7 +2386,7 @@ function applyImport(){
     <div style="font-size:1rem;font-weight:700;margin-bottom:16px">📂 Excelデータインポート</div>
     <div style="font-size:.8rem;color:var(--muted);margin-bottom:12px">
       Excelファイルをアップロードすると、シート名から事業を自動検出し、データを更新します。<br>
-      対応形式：<b>.xlsx / .xls</b>　｜　更新対象：本年実績・計画・前年実績
+      対応形式：<b>.xlsx / .xls</b>　｜　更新対象：本年実績・本年見込み・前年実績・計画・差異分析コメント
     </div>
     <div id="importDropZone" style="border:2px dashed var(--border);border-radius:10px;padding:32px;text-align:center;cursor:pointer;transition:border-color .15s;margin-bottom:16px"
       onclick="document.getElementById('importFileInput').click()"
