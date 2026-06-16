@@ -287,7 +287,8 @@ body{font-family:'UD デジタル 教科書体 NK','UDDigitalKyokasho-NK','Hirag
     <div class="header-logo">📊 <span>PL</span> Manager</div>
     <div class="header-title" id="headerTitle"></div>
     <div class="header-spacer"></div>
-    <button id="importBtn" onclick="openImportModal()" style="display:none;background:var(--accent);color:#fff;border:none;border-radius:8px;padding:6px 14px;font-size:.78rem;font-weight:600;cursor:pointer;gap:4px">📂 Excelインポート</button>
+    <button id="importBtn" onclick="openImportModal()" style="display:none;background:var(--accent);color:#fff;border:none;border-radius:8px;padding:6px 14px;font-size:.78rem;font-weight:600;cursor:pointer">📂 Excelインポート</button>
+    <button id="exportBtn" onclick="exportExcel()" style="display:none;background:#059669;color:#fff;border:none;border-radius:8px;padding:6px 14px;font-size:.78rem;font-weight:600;cursor:pointer">⬇️ Excel出力</button>
     <div class="header-updated" id="headerDate"></div>
     <select class="year-select" id="yearSelect" onchange="onYearChange(this.value)">
       <option value="2026">2026年</option>
@@ -588,6 +589,8 @@ function startApp(){
   document.getElementById('navUsers').style.display = isAdmin() ? 'block' : 'none';
   if(document.getElementById('importBtn'))
     document.getElementById('importBtn').style.display = canEdit() ? 'flex' : 'none';
+  if(document.getElementById('exportBtn'))
+    document.getElementById('exportBtn').style.display = 'flex';
   renderAll();
 }
 
@@ -2018,6 +2021,122 @@ CBブランド：15,523千円
   }
   document.getElementById('loginScreen').classList.add('visible');
 })();
+
+// ===== EXCEL EXPORT =====
+function exportExcel(){
+  const wb = XLSX.utils.book_new();
+  const fi = D.filled_idx;
+  const months = D.months;
+  const metrics = ['店消','売上','原価','粗利','販管費','貢献利益','UV','CVR','客単価'];
+  const metricLabel = {'貢献利益':'営業利益'};
+
+  // Row types per metric
+  const rowTypes = {
+    '店消':  ['本年実績','本年見込み','前年実績','計画','前年比','前年差異','計画比','計画差異'],
+    '売上':  ['本年実績','本年見込み','前年実績','計画','前年比','前年差異','計画比','計画差異'],
+    '原価':  ['本年実績','本年見込み','前年実績','計画','本年原価率','前年原価率','計画原価率'],
+    '粗利':  ['本年実績','本年見込み','前年実績','計画'],
+    '販管費':['本年実績','本年見込み','前年実績','計画','前年比','前年差異','計画比','計画差異'],
+    '貢献利益':['本年実績','本年見込み','前年実績','計画','本年利益率','前年利益率','計画利益率'],
+    'UV':    ['本年実績','前年実績','計画','前年比','前年差異','計画比','計画差異'],
+    'CVR':   ['本年実績','前年実績','計画','前年比','前年差異','計画比','計画差異'],
+    '客単価':['本年実績','前年実績','計画','前年比','前年差異','計画比','計画差異'],
+  };
+
+  D.businesses.forEach((biz, bi) => {
+    const name = biz.name;
+    const detail = D.biz_detail[name];
+    if(!detail) return;
+
+    const salesActual = getMergedActual(name,'売上',(detail['売上']||{}).actual||[]);
+    const salesPlan   = (detail['売上']||{}).plan||[];
+    const salesPrev   = (detail['売上']||{}).prev||[];
+
+    const aoa = []; // array of arrays for the sheet
+
+    // Header
+    aoa.push(['■'+currentYear+'年　事業別PL', '', '', '', '', ...Array(10).fill(''), '', currentYear]);
+    aoa.push(['', '（事業）']);
+    aoa.push(['', name]);
+    aoa.push([]);
+    aoa.push(['', '', '金額単位：千円', ...months, '累計']);
+
+    let rowNum = 1;
+    metrics.forEach(metric => {
+      const m = detail[metric];
+      if(!m) return;
+      const merged  = getMergedActual(name, metric, m.actual);
+      const planArr = m.plan.map((v,mi)=>{ const e=getPlanEdit(name,metric,mi); return e!==null?e:v; });
+      const prevArr = (m.prev||[]).map((v,mi)=>{ const e=getPrevEdit(name,metric,mi); return e!==null?e:v; });
+      const fcArr   = forecastMonthly(name, metric, merged, fi, prevArr);
+
+      const cumA = merged.slice(0,fi+1).reduce((a,v)=>a+v,0);
+      const cumP = planArr.slice(0,fi+1).reduce((a,v)=>a+v,0);
+      const cumV = prevArr.slice(0,fi+1).reduce((a,v)=>a+v,0);
+      const annualPlan = planArr.reduce((a,v)=>a+v,0);
+      const annualPrev = prevArr.reduce((a,v)=>a+v,0);
+      const landing    = fcArr.reduce((a,v)=>a+v,0);
+
+      const label = metricLabel[metric] || metric;
+      const types = rowTypes[metric] || ['本年実績','前年実績','計画'];
+
+      types.forEach(type => {
+        let vals, cum;
+        if(type==='本年実績'){
+          vals = months.map((m,mi)=>mi<=fi?merged[mi]:null);
+          cum  = cumA;
+        } else if(type==='本年見込み'){
+          vals = fcArr.slice(0,12);
+          cum  = landing;
+        } else if(type==='前年実績'){
+          vals = prevArr;
+          cum  = annualPrev;
+        } else if(type==='計画'){
+          vals = planArr;
+          cum  = annualPlan;
+        } else if(type==='前年比'){
+          vals = months.map((_,mi)=>mi<=fi&&prevArr[mi]?merged[mi]/prevArr[mi]:null);
+          cum  = cumV?cumA/cumV:null;
+        } else if(type==='前年差異'){
+          vals = months.map((_,mi)=>mi<=fi?merged[mi]-prevArr[mi]:null);
+          cum  = cumA-cumV;
+        } else if(type==='計画比'){
+          vals = months.map((_,mi)=>mi<=fi&&planArr[mi]?merged[mi]/planArr[mi]:null);
+          cum  = cumP?cumA/cumP:null;
+        } else if(type==='計画差異'){
+          vals = months.map((_,mi)=>mi<=fi?merged[mi]-planArr[mi]:null);
+          cum  = cumA-cumP;
+        } else if(type==='本年原価率'||type==='本年利益率'){
+          vals = months.map((_,mi)=>mi<=fi&&salesActual[mi]?merged[mi]/salesActual[mi]:null);
+          const cumS=salesActual.slice(0,fi+1).reduce((a,v)=>a+v,0);
+          cum  = cumS?cumA/cumS:null;
+        } else if(type==='前年原価率'||type==='前年利益率'){
+          vals = months.map((_,mi)=>salesPrev[mi]?prevArr[mi]/salesPrev[mi]:null);
+          const cumSV=salesPrev.slice(0,fi+1).reduce((a,v)=>a+v,0);
+          cum  = cumSV?cumV/cumSV:null;
+        } else if(type==='計画原価率'||type==='計画利益率'){
+          vals = months.map((_,mi)=>salesPlan[mi]?planArr[mi]/salesPlan[mi]:null);
+          const cumSP=salesPlan.reduce((a,v)=>a+v,0);
+          cum  = cumSP?annualPlan/cumSP:null;
+        } else {
+          vals = Array(12).fill(null);
+          cum  = null;
+        }
+
+        const isFirstType = type===types[0];
+        aoa.push([rowNum++, isFirstType?label:'', type, ...vals.map(v=>v!==null?Math.round(v*100)/100:null), cum!==null?Math.round(cum*100)/100:null]);
+      });
+    });
+
+    const ws = XLSX.utils.aoa_to_sheet(aoa);
+    // Column widths
+    ws['!cols'] = [{wch:4},{wch:14},{wch:12},...Array(12).fill({wch:10}),{wch:12}];
+    XLSX.utils.book_append_sheet(wb, ws, name.substring(0,31));
+  });
+
+  const filename = `PL_${currentYear}_${new Date().toISOString().slice(0,10)}.xlsx`;
+  XLSX.writeFile(wb, filename);
+}
 
 // ===== EXCEL IMPORT =====
 let _importData = null; // stores parsed data before applying
